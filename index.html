@@ -12,6 +12,7 @@
       --line: oklch(86% 0.008 245);
       --panel: oklch(97% 0.004 245);
       --paper: oklch(99% 0.004 245);
+      --stage: oklch(98.8% 0.003 245);
       --accent: oklch(45% 0.12 212);
       font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
     }
@@ -32,6 +33,17 @@
       min-height: 100vh;
     }
 
+    .app[data-theme="dark"] {
+      color-scheme: dark;
+      --ink: oklch(91% 0.008 245);
+      --muted: oklch(68% 0.012 245);
+      --line: oklch(28% 0.012 245);
+      --panel: oklch(18% 0.01 245);
+      --paper: oklch(13% 0.008 245);
+      --stage: oklch(10% 0.006 245);
+      --accent: oklch(72% 0.11 200);
+    }
+
     .app.is-panel-hidden {
       grid-template-columns: minmax(0, 1fr) 0;
     }
@@ -39,7 +51,7 @@
     .stage {
       position: relative;
       min-width: 0;
-      background: oklch(98.8% 0.003 245);
+      background: var(--stage);
     }
 
     canvas {
@@ -65,11 +77,16 @@
       color: var(--muted);
     }
 
-    .panel-toggle {
+    .stage-actions {
       position: absolute;
       right: 22px;
       top: 18px;
       z-index: 4;
+      display: flex;
+      gap: 8px;
+    }
+
+    .stage-actions button {
       width: auto;
       min-height: 34px;
       padding: 0 12px;
@@ -253,6 +270,11 @@
       color: color-mix(in oklch, var(--accent), black 28%);
     }
 
+    .app[data-theme="dark"] .preset-row button.is-active {
+      background: color-mix(in oklch, var(--accent), black 72%);
+      color: var(--ink);
+    }
+
     @media (max-width: 900px) {
       body { overflow: auto; }
       .app { grid-template-columns: 1fr; }
@@ -271,12 +293,15 @@
   </style>
 </head>
 <body>
-  <main class="app" id="app">
+  <main class="app" id="app" data-theme="light">
     <section class="stage" aria-label="Effect preview">
       <canvas id="murmuration"></canvas>
-      <img class="interface-overlay" id="interfaceOverlay" src="assets/nsiq-input.png" alt="Interface overlay preview">
+      <img class="interface-overlay is-visible" id="interfaceOverlay" src="assets/nsiq-input.png" alt="Interface overlay preview">
       <div class="hud"><span class="dot"></span><span id="readout">16000 particles</span></div>
-      <button class="panel-toggle" id="panelToggle" type="button" aria-controls="settingsPanel" aria-expanded="true">Hide panel</button>
+      <div class="stage-actions">
+        <button id="themeToggle" type="button" aria-pressed="false">Dark</button>
+        <button id="panelToggle" type="button" aria-controls="settingsPanel" aria-expanded="true">Hide panel</button>
+      </div>
     </section>
     <aside id="settingsPanel">
       <h1>Murmuration Lab</h1>
@@ -288,7 +313,7 @@
           <button data-preset="paper">Paper</button>
           <button data-preset="night">Night</button>
           <button data-preset="warm">Warm</button>
-          <button id="overlayToggle" type="button" aria-pressed="false">Overlay</button>
+          <button id="overlayToggle" class="is-active" type="button" aria-pressed="true">Overlay</button>
         </div>
       </div>
 
@@ -310,6 +335,7 @@
             <option value="arch">Arch</option>
             <option value="vortex">Vortex</option>
             <option value="veil">Veil</option>
+            <option value="spiral">Spiral</option>
           </select>
         </label>
       </div>
@@ -343,9 +369,12 @@
     const overlayToggle = document.getElementById("overlayToggle");
     const app = document.getElementById("app");
     const panelToggle = document.getElementById("panelToggle");
+    const themeToggle = document.getElementById("themeToggle");
     const copyPreviewBtn = document.getElementById("copyPreviewBtn");
 
     const settings = {
+      theme: "light",
+      overlay: true,
       particles: 16000,
       speed: 0.55,
       turbulence: 0.42,
@@ -488,6 +517,12 @@
     }
 
     function syncControlsFromSettings() {
+      app.dataset.theme = settings.theme;
+      interfaceOverlay.classList.toggle("is-visible", settings.overlay);
+      overlayToggle.classList.toggle("is-active", settings.overlay);
+      overlayToggle.setAttribute("aria-pressed", String(settings.overlay));
+      themeToggle.textContent = settings.theme === "dark" ? "Light" : "Dark";
+      themeToggle.setAttribute("aria-pressed", String(settings.theme === "dark"));
       document.getElementById("particleColor").value = settings.particleColor;
       document.getElementById("backgroundColor").value = settings.backgroundColor;
       document.getElementById("axis").value = settings.axis;
@@ -572,6 +607,11 @@
         y = h * 0.54 + Math.sin(turn) * radius * (0.5 + settings.arch * 0.5);
       } else if (settings.shape === "veil") {
         y = h * (0.5 + u * 0.28) + Math.sin(u * Math.PI * 3 + phase * 0.002) * h * 0.09 * settings.crest + n * band * 1.25;
+      } else if (settings.shape === "spiral") {
+        const turn = u * Math.PI * 3.6 + phase * 0.0024 + n * 0.7;
+        const radius = (0.08 + abs * 0.54) * Math.min(w, h) * settings.spread * settings.formationScale;
+        x = w * 0.5 + Math.cos(turn) * radius;
+        y = h * 0.55 + Math.sin(turn) * radius * (0.35 + settings.arch * 0.55);
       }
 
       const expansion = 1 + dispersalPulse * 0.34 - settings.gathering * 0.18;
@@ -720,6 +760,11 @@
       y = h * .54 + Math.sin(turn) * radius * (.5 + settings.arch * .5);
     } else if (settings.shape === "veil") {
       y = h * (.5 + u * .28) + Math.sin(u * Math.PI * 3 + t * .002) * h * .09 * settings.crest + n * band * 1.25;
+    } else if (settings.shape === "spiral") {
+      const turn = u * Math.PI * 3.6 + t * .0024 + n * .7;
+      const radius = (.08 + abs * .54) * Math.min(w, h) * settings.spread * settings.formationScale;
+      x = w * .5 + Math.cos(turn) * radius;
+      y = h * .55 + Math.sin(turn) * radius * (.35 + settings.arch * .55);
     }
     const expansion = 1 + dispersalPulse * .34 - settings.gathering * .18;
     const coverageLift = 1 + settings.coverage * .38;
@@ -824,9 +869,9 @@
     document.querySelectorAll("[data-preset]").forEach(button => {
       button.addEventListener("click", () => {
         const presets = {
-          paper: { particleColor: "#394044", backgroundColor: "#fafafa", fade: 0.24, turbulence: 0.42, axis: "horizontal", shape: "ridge", coverage: 0.72, formationScale: 1.18, ambientParticles: 0.34, spread: 1.02, scatter: 0.42, coordination: 0.8, gathering: 0.46, dispersal: 0.48, reformation: 0.64, responsiveness: 0.35, calmness: 0.82, dataStructure: 0.32, patternSubtlety: 0.74, negativeSpace: 0.56, edgeSoftness: 0.8, depth: 0.55, grain: 0.48 },
-          night: { particleColor: "#d9ded9", backgroundColor: "#161817", fade: 0.18, turbulence: 0.5, axis: "diagonal", shape: "wave", coverage: 0.82, formationScale: 1.26, ambientParticles: 0.42, spread: 1.08, scatter: 0.56, coordination: 0.72, gathering: 0.38, dispersal: 0.62, reformation: 0.7, responsiveness: 0.52, calmness: 0.66, dataStructure: 0.48, patternSubtlety: 0.62, negativeSpace: 0.36, edgeSoftness: 0.72, depth: 0.78, grain: 0.38 },
-          warm: { particleColor: "#5b5146", backgroundColor: "#f7f1e8", fade: 0.26, turbulence: 0.36, axis: "horizontal", shape: "veil", coverage: 0.68, formationScale: 1.14, ambientParticles: 0.38, spread: 1, scatter: 0.36, coordination: 0.86, gathering: 0.5, dispersal: 0.38, reformation: 0.58, responsiveness: 0.25, calmness: 0.9, dataStructure: 0.22, patternSubtlety: 0.82, negativeSpace: 0.64, edgeSoftness: 0.86, depth: 0.45, grain: 0.52 }
+          paper: { theme: "light", overlay: true, particleColor: "#394044", backgroundColor: "#fafafa", fade: 0.24, turbulence: 0.42, axis: "horizontal", shape: "ridge", coverage: 0.72, formationScale: 1.18, ambientParticles: 0.34, spread: 1.02, scatter: 0.42, coordination: 0.8, gathering: 0.46, dispersal: 0.48, reformation: 0.64, responsiveness: 0.35, calmness: 0.82, dataStructure: 0.32, patternSubtlety: 0.74, negativeSpace: 0.56, edgeSoftness: 0.8, depth: 0.55, grain: 0.48 },
+          night: { theme: "dark", overlay: true, particleColor: "#d9ded9", backgroundColor: "#161817", fade: 0.18, turbulence: 0.5, axis: "diagonal", shape: "wave", coverage: 0.82, formationScale: 1.26, ambientParticles: 0.42, spread: 1.08, scatter: 0.56, coordination: 0.72, gathering: 0.38, dispersal: 0.62, reformation: 0.7, responsiveness: 0.52, calmness: 0.66, dataStructure: 0.48, patternSubtlety: 0.62, negativeSpace: 0.36, edgeSoftness: 0.72, depth: 0.78, grain: 0.38 },
+          warm: { theme: "light", overlay: true, particleColor: "#5b5146", backgroundColor: "#f7f1e8", fade: 0.26, turbulence: 0.36, axis: "horizontal", shape: "veil", coverage: 0.68, formationScale: 1.14, ambientParticles: 0.38, spread: 1, scatter: 0.36, coordination: 0.86, gathering: 0.5, dispersal: 0.38, reformation: 0.58, responsiveness: 0.25, calmness: 0.9, dataStructure: 0.22, patternSubtlety: 0.82, negativeSpace: 0.64, edgeSoftness: 0.86, depth: 0.45, grain: 0.52 }
         };
         Object.assign(settings, presets[button.dataset.preset]);
         syncControlsFromSettings();
@@ -858,9 +903,26 @@
     });
 
     overlayToggle.addEventListener("click", () => {
-      const isVisible = interfaceOverlay.classList.toggle("is-visible");
-      overlayToggle.classList.toggle("is-active", isVisible);
-      overlayToggle.setAttribute("aria-pressed", String(isVisible));
+      settings.overlay = !settings.overlay;
+      syncControlsFromSettings();
+      updatePreviewUrl();
+    });
+
+    themeToggle.addEventListener("click", () => {
+      settings.theme = settings.theme === "dark" ? "light" : "dark";
+      if (settings.theme === "dark") {
+        settings.backgroundColor = "#161817";
+        settings.particleColor = "#d9ded9";
+        settings.fade = Math.min(settings.fade, 0.2);
+      } else {
+        settings.backgroundColor = "#fafafa";
+        settings.particleColor = "#394044";
+        settings.fade = Math.max(settings.fade, 0.22);
+      }
+      syncControlsFromSettings();
+      refreshExport();
+      clearFrame();
+      updatePreviewUrl();
     });
 
     panelToggle.addEventListener("click", () => {
