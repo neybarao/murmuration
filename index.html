@@ -11,8 +11,8 @@
       --muted: oklch(49% 0.012 245);
       --line: oklch(86% 0.008 245);
       --panel: oklch(97% 0.004 245);
-      --paper: oklch(99% 0.004 245);
-      --stage: oklch(98.8% 0.003 245);
+      --paper: #FFFFFF;
+      --stage: #FFFFFF;
       --accent: oklch(45% 0.12 212);
       font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
     }
@@ -39,8 +39,8 @@
       --muted: oklch(68% 0.012 245);
       --line: oklch(28% 0.012 245);
       --panel: oklch(18% 0.01 245);
-      --paper: oklch(13% 0.008 245);
-      --stage: oklch(10% 0.006 245);
+      --paper: #000000;
+      --stage: #000000;
       --accent: oklch(72% 0.11 200);
     }
 
@@ -296,7 +296,7 @@
   <main class="app" id="app" data-theme="light">
     <section class="stage" aria-label="Effect preview">
       <canvas id="murmuration"></canvas>
-      <img class="interface-overlay is-visible" id="interfaceOverlay" src="assets/nsiq-input.png" alt="Interface overlay preview">
+      <img class="interface-overlay is-visible" id="interfaceOverlay" src="assets/nsiq-overlay-light.svg" alt="Interface overlay preview">
       <div class="hud"><span class="dot"></span><span id="readout">16000 particles</span></div>
       <div class="stage-actions">
         <button id="themeToggle" type="button" aria-pressed="false">Dark</button>
@@ -342,8 +342,8 @@
 
       <div class="group">
         <div class="group-title">Colors</div>
-        <label>Particles <input type="color" id="particleColor" value="#394044"></label>
-        <label>Background <input type="color" id="backgroundColor" value="#fafafa"></label>
+        <label>Particles <input type="color" id="particleColor" value="#C2C2C2"></label>
+        <label>Background <input type="color" id="backgroundColor" value="#FFFFFF"></label>
       </div>
 
       <div class="group">
@@ -403,8 +403,8 @@
       density: 0.72,
       particleSize: 0.72,
       fade: 0.22,
-      particleColor: "#394044",
-      backgroundColor: "#fafafa"
+      particleColor: "#C2C2C2",
+      backgroundColor: "#FFFFFF"
     };
 
     const controlGroups = [
@@ -518,6 +518,7 @@
 
     function syncControlsFromSettings() {
       app.dataset.theme = settings.theme;
+      interfaceOverlay.src = settings.theme === "dark" ? "assets/nsiq-overlay-dark.svg" : "assets/nsiq-overlay-light.svg";
       interfaceOverlay.classList.toggle("is-visible", settings.overlay);
       overlayToggle.classList.toggle("is-active", settings.overlay);
       overlayToggle.setAttribute("aria-pressed", String(settings.overlay));
@@ -869,9 +870,9 @@
     document.querySelectorAll("[data-preset]").forEach(button => {
       button.addEventListener("click", () => {
         const presets = {
-          paper: { theme: "light", overlay: true, particleColor: "#394044", backgroundColor: "#fafafa", fade: 0.24, turbulence: 0.42, axis: "horizontal", shape: "ridge", coverage: 0.72, formationScale: 1.18, ambientParticles: 0.34, spread: 1.02, scatter: 0.42, coordination: 0.8, gathering: 0.46, dispersal: 0.48, reformation: 0.64, responsiveness: 0.35, calmness: 0.82, dataStructure: 0.32, patternSubtlety: 0.74, negativeSpace: 0.56, edgeSoftness: 0.8, depth: 0.55, grain: 0.48 },
-          night: { theme: "dark", overlay: true, particleColor: "#d9ded9", backgroundColor: "#161817", fade: 0.18, turbulence: 0.5, axis: "diagonal", shape: "wave", coverage: 0.82, formationScale: 1.26, ambientParticles: 0.42, spread: 1.08, scatter: 0.56, coordination: 0.72, gathering: 0.38, dispersal: 0.62, reformation: 0.7, responsiveness: 0.52, calmness: 0.66, dataStructure: 0.48, patternSubtlety: 0.62, negativeSpace: 0.36, edgeSoftness: 0.72, depth: 0.78, grain: 0.38 },
-          warm: { theme: "light", overlay: true, particleColor: "#5b5146", backgroundColor: "#f7f1e8", fade: 0.26, turbulence: 0.36, axis: "horizontal", shape: "veil", coverage: 0.68, formationScale: 1.14, ambientParticles: 0.38, spread: 1, scatter: 0.36, coordination: 0.86, gathering: 0.5, dispersal: 0.38, reformation: 0.58, responsiveness: 0.25, calmness: 0.9, dataStructure: 0.22, patternSubtlety: 0.82, negativeSpace: 0.64, edgeSoftness: 0.86, depth: 0.45, grain: 0.52 }
+          paper: { theme: "light", overlay: true, particleColor: "#C2C2C2", backgroundColor: "#FFFFFF", fade: 0.24, turbulence: 0.42, axis: "horizontal", shape: "ridge", coverage: 0.72, formationScale: 1.18, ambientParticles: 0.34, spread: 1.02, scatter: 0.42, coordination: 0.8, gathering: 0.46, dispersal: 0.48, reformation: 0.64, responsiveness: 0.35, calmness: 0.82, dataStructure: 0.32, patternSubtlety: 0.74, negativeSpace: 0.56, edgeSoftness: 0.8, depth: 0.55, grain: 0.48 },
+          night: { theme: "dark", overlay: true, particleColor: "#737373", backgroundColor: "#000000", fade: 0.18, turbulence: 0.5, axis: "diagonal", shape: "wave", coverage: 0.82, formationScale: 1.26, ambientParticles: 0.42, spread: 1.08, scatter: 0.56, coordination: 0.72, gathering: 0.38, dispersal: 0.62, reformation: 0.7, responsiveness: 0.52, calmness: 0.66, dataStructure: 0.48, patternSubtlety: 0.62, negativeSpace: 0.36, edgeSoftness: 0.72, depth: 0.78, grain: 0.38 },
+          warm: { theme: "light", overlay: true, particleColor: "#C2C2C2", backgroundColor: "#FFFFFF", fade: 0.26, turbulence: 0.36, axis: "horizontal", shape: "veil", coverage: 0.68, formationScale: 1.14, ambientParticles: 0.38, spread: 1, scatter: 0.36, coordination: 0.86, gathering: 0.5, dispersal: 0.38, reformation: 0.58, responsiveness: 0.25, calmness: 0.9, dataStructure: 0.22, patternSubtlety: 0.82, negativeSpace: 0.64, edgeSoftness: 0.86, depth: 0.45, grain: 0.52 }
         };
         Object.assign(settings, presets[button.dataset.preset]);
         syncControlsFromSettings();
@@ -911,12 +912,12 @@
     themeToggle.addEventListener("click", () => {
       settings.theme = settings.theme === "dark" ? "light" : "dark";
       if (settings.theme === "dark") {
-        settings.backgroundColor = "#161817";
-        settings.particleColor = "#d9ded9";
+        settings.backgroundColor = "#000000";
+        settings.particleColor = "#737373";
         settings.fade = Math.min(settings.fade, 0.2);
       } else {
-        settings.backgroundColor = "#fafafa";
-        settings.particleColor = "#394044";
+        settings.backgroundColor = "#FFFFFF";
+        settings.particleColor = "#C2C2C2";
         settings.fade = Math.max(settings.fade, 0.22);
       }
       syncControlsFromSettings();
