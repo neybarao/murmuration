@@ -227,6 +227,10 @@
       margin-top: 12px;
     }
 
+    .actions.single {
+      grid-template-columns: 1fr;
+    }
+
     textarea {
       min-height: 190px;
       resize: vertical;
@@ -323,6 +327,9 @@
           <button id="copyBtn" class="primary">Copy</button>
           <button id="downloadBtn">Download JS</button>
         </div>
+        <div class="actions single">
+          <button id="copyPreviewBtn">Copy preview link</button>
+        </div>
       </div>
     </aside>
   </main>
@@ -336,6 +343,7 @@
     const overlayToggle = document.getElementById("overlayToggle");
     const app = document.getElementById("app");
     const panelToggle = document.getElementById("panelToggle");
+    const copyPreviewBtn = document.getElementById("copyPreviewBtn");
 
     const settings = {
       particles: 16000,
@@ -434,6 +442,60 @@
 
     function clamp(value, min, max) {
       return Math.min(max, Math.max(min, value));
+    }
+
+    function encodeSettings() {
+      const json = JSON.stringify(settings);
+      const bytes = new TextEncoder().encode(json);
+      let binary = "";
+      bytes.forEach(byte => { binary += String.fromCharCode(byte); });
+      return btoa(binary).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+    }
+
+    function decodeSettings(value) {
+      const normalized = value.replace(/-/g, "+").replace(/_/g, "/");
+      const padded = normalized + "=".repeat((4 - normalized.length % 4) % 4);
+      const binary = atob(padded);
+      const bytes = Uint8Array.from(binary, char => char.charCodeAt(0));
+      return JSON.parse(new TextDecoder().decode(bytes));
+    }
+
+    function getPreviewUrl() {
+      const url = new URL(location.href);
+      url.searchParams.set("config", encodeSettings());
+      return url.toString();
+    }
+
+    function updatePreviewUrl() {
+      const url = new URL(location.href);
+      url.searchParams.set("config", encodeSettings());
+      history.replaceState(null, "", url);
+    }
+
+    function applySharedConfig() {
+      const encoded = new URLSearchParams(location.search).get("config");
+      if (!encoded) return;
+      try {
+        const nextSettings = decodeSettings(encoded);
+        Object.keys(settings).forEach(key => {
+          if (Object.prototype.hasOwnProperty.call(nextSettings, key)) {
+            settings[key] = nextSettings[key];
+          }
+        });
+      } catch (error) {
+        console.warn("Could not load shared murmuration config.", error);
+      }
+    }
+
+    function syncControlsFromSettings() {
+      document.getElementById("particleColor").value = settings.particleColor;
+      document.getElementById("backgroundColor").value = settings.backgroundColor;
+      document.getElementById("axis").value = settings.axis;
+      document.getElementById("shape").value = settings.shape;
+      controls.forEach(([key]) => {
+        document.getElementById(key).value = settings[key];
+        document.getElementById(`${key}Value`).textContent = settings[key];
+      });
     }
 
     function resize() {
@@ -728,6 +790,8 @@
     }
 
     document.getElementById("controls").innerHTML = controlMarkup();
+    applySharedConfig();
+    syncControlsFromSettings();
     controls.forEach(([key]) => {
       const input = document.getElementById(key);
       const output = document.getElementById(`${key}Value`);
@@ -736,6 +800,7 @@
         output.textContent = settings[key];
         if (key === "particles" || key === "ambientParticles") syncParticleCount();
         refreshExport();
+        updatePreviewUrl();
       });
     });
 
@@ -743,6 +808,7 @@
       document.getElementById(key).addEventListener("input", event => {
         settings[key] = event.target.value;
         refreshExport();
+        updatePreviewUrl();
       });
     });
 
@@ -751,6 +817,7 @@
         settings[key] = event.target.value;
         refreshExport();
         clearFrame();
+        updatePreviewUrl();
       });
     });
 
@@ -762,21 +829,22 @@
           warm: { particleColor: "#5b5146", backgroundColor: "#f7f1e8", fade: 0.26, turbulence: 0.36, axis: "horizontal", shape: "veil", coverage: 0.68, formationScale: 1.14, ambientParticles: 0.38, spread: 1, scatter: 0.36, coordination: 0.86, gathering: 0.5, dispersal: 0.38, reformation: 0.58, responsiveness: 0.25, calmness: 0.9, dataStructure: 0.22, patternSubtlety: 0.82, negativeSpace: 0.64, edgeSoftness: 0.86, depth: 0.45, grain: 0.52 }
         };
         Object.assign(settings, presets[button.dataset.preset]);
-        document.getElementById("particleColor").value = settings.particleColor;
-        document.getElementById("backgroundColor").value = settings.backgroundColor;
-        document.getElementById("axis").value = settings.axis;
-        document.getElementById("shape").value = settings.shape;
-        controls.forEach(([key]) => {
-          document.getElementById(key).value = settings[key];
-          document.getElementById(`${key}Value`).textContent = settings[key];
-        });
+        syncControlsFromSettings();
+        syncParticleCount();
         refreshExport();
         clearFrame();
+        updatePreviewUrl();
       });
     });
 
     document.getElementById("copyBtn").addEventListener("click", async () => {
       await navigator.clipboard.writeText(exportCode.value);
+    });
+
+    copyPreviewBtn.addEventListener("click", async () => {
+      await navigator.clipboard.writeText(getPreviewUrl());
+      copyPreviewBtn.textContent = "Preview link copied";
+      setTimeout(() => { copyPreviewBtn.textContent = "Copy preview link"; }, 1400);
     });
 
     document.getElementById("downloadBtn").addEventListener("click", () => {
