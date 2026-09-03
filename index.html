@@ -281,6 +281,9 @@
       rotation: 0,
       axis: "horizontal",
       shape: "ridge",
+      coverage: 0.72,
+      formationScale: 1.18,
+      ambientParticles: 0.34,
       spread: 0.88,
       scatter: 0.34,
       coordination: 0.8,
@@ -311,6 +314,9 @@
           ["particles", "Particles", 2000, 32000, 1000],
           ["speed", "Speed", 0, 2, 0.01],
           ["rotation", "Rotation", -35, 35, 1],
+          ["coverage", "Coverage", 0, 1, 0.01],
+          ["formationScale", "Formation scale", 0.7, 1.8, 0.01],
+          ["ambientParticles", "Ambient particles", 0, 0.75, 0.01],
           ["spread", "Spread", 0.35, 1.4, 0.01],
           ["scatter", "Scatter", 0, 1.2, 0.01]
         ]
@@ -382,24 +388,41 @@
     function syncParticleCount() {
       while (particles.length < settings.particles) particles.push(makeParticle(particles.length + 1));
       particles.length = settings.particles;
+      particles.forEach((particle, index) => {
+        particle.index = particle.index || index + 1;
+        particle.field = rand(particle.index + 77) < settings.ambientParticles;
+      });
       readout.textContent = `${settings.particles.toLocaleString("en-US")} particles`;
     }
 
     function makeParticle(i) {
       const r = Math.sqrt(Math.random());
       const a = Math.random() * Math.PI * 2;
+      const field = rand(i + 77) < settings.ambientParticles;
       return {
-        x: w * 0.5 + Math.cos(a) * r * w * 0.42,
-        y: h * 0.58 + Math.sin(a) * r * h * 0.28,
+        x: field ? Math.random() * w : w * 0.5 + Math.cos(a) * r * w * 0.42,
+        y: field ? Math.random() * h : h * 0.58 + Math.sin(a) * r * h * 0.28,
         vx: (Math.random() - 0.5) * 0.6,
         vy: (Math.random() - 0.5) * 0.6,
-        seed: i * 13.37 + Math.random() * 900
+        seed: i * 13.37 + Math.random() * 900,
+        index: i,
+        field
       };
     }
 
     function targetFor(p, phase) {
       const pulse = 0.5 + 0.5 * Math.sin(phase * 0.0014);
       const dispersalPulse = settings.dispersal * pulse;
+      if (p.field) {
+        const ax = rand(p.seed + Math.floor(phase * 0.003));
+        const ay = rand(p.seed + 911 + Math.floor(phase * 0.002));
+        const driftX = Math.sin(phase * 0.0007 + p.seed) * w * 0.08 * settings.coverage;
+        const driftY = Math.cos(phase * 0.0006 + p.seed) * h * 0.08 * settings.coverage;
+        return {
+          x: w * (0.08 + ax * 0.84) + driftX,
+          y: h * (0.08 + ay * 0.84) + driftY
+        };
+      }
       const n = (rand(p.seed + Math.floor(phase * 0.018)) - 0.5) * (settings.turbulence + settings.scatter + dispersalPulse * 0.5);
       const u = ((p.seed * 0.618033 + phase * 0.00035) % 1) * 2 - 1;
       const abs = Math.abs(u);
@@ -410,7 +433,7 @@
       const crest = Math.exp(-structuredAbs * structuredAbs * 5.4) * h * 0.36 * settings.crest * subtlety;
       const wing = Math.pow(abs, 1.7) * h * 0.24 * settings.arch;
       const band = h * (0.025 + 0.21 * settings.density * (1 - Math.exp(-abs * (2 + settings.edgeSoftness * 2.4))));
-      let x = w * 0.5 + structuredU * w * 0.54 * settings.spread;
+      let x = w * 0.5 + structuredU * w * 0.54 * settings.spread * settings.formationScale;
       let y = h * (0.62 + 0.09 * Math.sin(u * Math.PI + phase * 0.002)) - crest + wing + n * band;
 
       if (settings.shape === "wave") {
@@ -419,7 +442,7 @@
         y = h * 0.68 - Math.sin((1 - abs) * Math.PI) * h * 0.34 * settings.crest + n * band;
       } else if (settings.shape === "vortex") {
         const turn = u * Math.PI * 2.4 + phase * 0.003 + p.seed * 0.01;
-        const radius = (0.12 + abs * 0.42 + n * 0.04) * Math.min(w, h) * settings.spread;
+        const radius = (0.12 + abs * 0.42 + n * 0.04) * Math.min(w, h) * settings.spread * settings.formationScale;
         x = w * 0.5 + Math.cos(turn) * radius;
         y = h * 0.54 + Math.sin(turn) * radius * (0.5 + settings.arch * 0.5);
       } else if (settings.shape === "veil") {
@@ -427,10 +450,11 @@
       }
 
       const expansion = 1 + dispersalPulse * 0.34 - settings.gathering * 0.18;
-      x = w * 0.5 + (x - w * 0.5) * expansion;
-      y = h * 0.55 + (y - h * 0.55) * expansion;
-      x += (rand(p.seed + 101) - 0.5) * w * 0.08 * settings.scatter * (1.3 - settings.calmness * 0.5);
-      y += (rand(p.seed + 202) - 0.5) * h * 0.08 * settings.scatter * (1.3 - settings.calmness * 0.5);
+      const coverageLift = 1 + settings.coverage * 0.38;
+      x = w * 0.5 + (x - w * 0.5) * expansion * coverageLift;
+      y = h * 0.55 + (y - h * 0.55) * expansion * (1 + settings.coverage * 0.5);
+      x += (rand(p.seed + 101) - 0.5) * w * (0.08 + settings.coverage * 0.18) * settings.scatter * (1.3 - settings.calmness * 0.5);
+      y += (rand(p.seed + 202) - 0.5) * h * (0.08 + settings.coverage * 0.2) * settings.scatter * (1.3 - settings.calmness * 0.5);
 
       const hollow = Math.exp(-u * u * 18) * settings.arch * settings.negativeSpace;
       if (rand(p.seed + 42) < hollow * 0.55) y += h * (0.13 + 0.16 * rand(p.seed + 9));
@@ -493,7 +517,8 @@
         }
         const flicker = rand(p.seed + Math.floor(t * 0.002));
         const depth = 0.32 + settings.depth * 0.5 * rand(p.seed + 33);
-        ctx.globalAlpha = clamp(0.12 + depth + flicker * settings.grain * 0.34, 0.08, 0.92);
+        const fieldOpacity = p.field ? 0.34 + settings.coverage * 0.22 : 1;
+        ctx.globalAlpha = clamp((0.12 + depth + flicker * settings.grain * 0.34) * fieldOpacity, 0.04, 0.92);
         ctx.fillRect(p.x, p.y, settings.particleSize, settings.particleSize);
       }
       ctx.globalAlpha = 1;
@@ -535,11 +560,19 @@
   };
   const makeParticle = i => {
     const r = Math.sqrt(Math.random()), a = Math.random() * Math.PI * 2;
-    return { x: w * .5 + Math.cos(a) * r * w * .42, y: h * .58 + Math.sin(a) * r * h * .28, vx: (Math.random() - .5) * .6, vy: (Math.random() - .5) * .6, seed: i * 13.37 + Math.random() * 900 };
+    const field = rand(i + 77) < settings.ambientParticles;
+    return { x: field ? Math.random() * w : w * .5 + Math.cos(a) * r * w * .42, y: field ? Math.random() * h : h * .58 + Math.sin(a) * r * h * .28, vx: (Math.random() - .5) * .6, vy: (Math.random() - .5) * .6, seed: i * 13.37 + Math.random() * 900, index: i, field };
   };
   const targetFor = p => {
     const pulse = .5 + .5 * Math.sin(t * .0014);
     const dispersalPulse = settings.dispersal * pulse;
+    if (p.field) {
+      const ax = rand(p.seed + Math.floor(t * .003));
+      const ay = rand(p.seed + 911 + Math.floor(t * .002));
+      const driftX = Math.sin(t * .0007 + p.seed) * w * .08 * settings.coverage;
+      const driftY = Math.cos(t * .0006 + p.seed) * h * .08 * settings.coverage;
+      return { x: w * (.08 + ax * .84) + driftX, y: h * (.08 + ay * .84) + driftY };
+    }
     const n = (rand(p.seed + Math.floor(t * .018)) - .5) * (settings.turbulence + settings.scatter + dispersalPulse * .5);
     const u = ((p.seed * .618033 + t * .00035) % 1) * 2 - 1;
     const abs = Math.abs(u);
@@ -550,24 +583,25 @@
     const crest = Math.exp(-structuredAbs * structuredAbs * 5.4) * h * .36 * settings.crest * subtlety;
     const wing = Math.pow(abs, 1.7) * h * .24 * settings.arch;
     const band = h * (.025 + .21 * settings.density * (1 - Math.exp(-abs * (2 + settings.edgeSoftness * 2.4))));
-    let x = w * .5 + structuredU * w * .54 * settings.spread, y = h * (.62 + .09 * Math.sin(u * Math.PI + t * .002)) - crest + wing + n * band;
+    let x = w * .5 + structuredU * w * .54 * settings.spread * settings.formationScale, y = h * (.62 + .09 * Math.sin(u * Math.PI + t * .002)) - crest + wing + n * band;
     if (settings.shape === "wave") {
       y = h * .55 + Math.sin(u * Math.PI * 1.4 + t * .0025) * h * .2 * settings.crest + n * band;
     } else if (settings.shape === "arch") {
       y = h * .68 - Math.sin((1 - abs) * Math.PI) * h * .34 * settings.crest + n * band;
     } else if (settings.shape === "vortex") {
       const turn = u * Math.PI * 2.4 + t * .003 + p.seed * .01;
-      const radius = (.12 + abs * .42 + n * .04) * Math.min(w, h) * settings.spread;
+      const radius = (.12 + abs * .42 + n * .04) * Math.min(w, h) * settings.spread * settings.formationScale;
       x = w * .5 + Math.cos(turn) * radius;
       y = h * .54 + Math.sin(turn) * radius * (.5 + settings.arch * .5);
     } else if (settings.shape === "veil") {
       y = h * (.5 + u * .28) + Math.sin(u * Math.PI * 3 + t * .002) * h * .09 * settings.crest + n * band * 1.25;
     }
     const expansion = 1 + dispersalPulse * .34 - settings.gathering * .18;
-    x = w * .5 + (x - w * .5) * expansion;
-    y = h * .55 + (y - h * .55) * expansion;
-    x += (rand(p.seed + 101) - .5) * w * .08 * settings.scatter * (1.3 - settings.calmness * .5);
-    y += (rand(p.seed + 202) - .5) * h * .08 * settings.scatter * (1.3 - settings.calmness * .5);
+    const coverageLift = 1 + settings.coverage * .38;
+    x = w * .5 + (x - w * .5) * expansion * coverageLift;
+    y = h * .55 + (y - h * .55) * expansion * (1 + settings.coverage * .5);
+    x += (rand(p.seed + 101) - .5) * w * (.08 + settings.coverage * .18) * settings.scatter * (1.3 - settings.calmness * .5);
+    y += (rand(p.seed + 202) - .5) * h * (.08 + settings.coverage * .2) * settings.scatter * (1.3 - settings.calmness * .5);
     const hollow = Math.exp(-u * u * 18) * settings.arch * settings.negativeSpace;
     if (rand(p.seed + 42) < hollow * .55) y += h * (.13 + .16 * rand(p.seed + 9));
     const angle = settings.rotation * Math.PI / 180, cx = w * .5, cy = h * .55, dx = x - cx, dy = y - cy;
@@ -589,6 +623,10 @@
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     while (particles.length < settings.particles) particles.push(makeParticle(particles.length + 1));
     particles.length = settings.particles;
+    particles.forEach((particle, index) => {
+      particle.index = particle.index || index + 1;
+      particle.field = rand(particle.index + 77) < settings.ambientParticles;
+    });
     ctx.globalAlpha = 1; ctx.fillStyle = settings.backgroundColor; ctx.fillRect(0, 0, w, h);
   }
   function frame() {
@@ -608,7 +646,8 @@
       p.y += p.vy * settings.speed * (.65 + settings.responsiveness * .55);
       const flicker = rand(p.seed + Math.floor(t * .002));
       const depth = .32 + settings.depth * .5 * rand(p.seed + 33);
-      ctx.globalAlpha = Math.min(.92, Math.max(.08, .12 + depth + flicker * settings.grain * .34));
+      const fieldOpacity = p.field ? .34 + settings.coverage * .22 : 1;
+      ctx.globalAlpha = Math.min(.92, Math.max(.04, (.12 + depth + flicker * settings.grain * .34) * fieldOpacity));
       ctx.fillRect(p.x, p.y, settings.particleSize, settings.particleSize);
     }
     animationId = requestAnimationFrame(frame);
@@ -632,7 +671,7 @@
       input.addEventListener("input", () => {
         settings[key] = Number(input.value);
         output.textContent = settings[key];
-        if (key === "particles") syncParticleCount();
+        if (key === "particles" || key === "ambientParticles") syncParticleCount();
         refreshExport();
       });
     });
@@ -655,9 +694,9 @@
     document.querySelectorAll("[data-preset]").forEach(button => {
       button.addEventListener("click", () => {
         const presets = {
-          paper: { particleColor: "#394044", backgroundColor: "#fafafa", fade: 0.22, turbulence: 0.42, axis: "horizontal", shape: "ridge", scatter: 0.34, coordination: 0.8, gathering: 0.55, dispersal: 0.38, reformation: 0.64, responsiveness: 0.35, calmness: 0.82, dataStructure: 0.32, patternSubtlety: 0.74, negativeSpace: 0.62, edgeSoftness: 0.8, depth: 0.55, grain: 0.48 },
-          night: { particleColor: "#d9ded9", backgroundColor: "#161817", fade: 0.16, turbulence: 0.5, axis: "diagonal", shape: "wave", scatter: 0.48, coordination: 0.72, gathering: 0.42, dispersal: 0.58, reformation: 0.7, responsiveness: 0.52, calmness: 0.66, dataStructure: 0.48, patternSubtlety: 0.62, negativeSpace: 0.42, edgeSoftness: 0.72, depth: 0.78, grain: 0.38 },
-          warm: { particleColor: "#5b5146", backgroundColor: "#f7f1e8", fade: 0.24, turbulence: 0.36, axis: "horizontal", shape: "veil", scatter: 0.28, coordination: 0.86, gathering: 0.62, dispersal: 0.3, reformation: 0.58, responsiveness: 0.25, calmness: 0.9, dataStructure: 0.22, patternSubtlety: 0.82, negativeSpace: 0.7, edgeSoftness: 0.86, depth: 0.45, grain: 0.52 }
+          paper: { particleColor: "#394044", backgroundColor: "#fafafa", fade: 0.24, turbulence: 0.42, axis: "horizontal", shape: "ridge", coverage: 0.72, formationScale: 1.18, ambientParticles: 0.34, spread: 1.02, scatter: 0.42, coordination: 0.8, gathering: 0.46, dispersal: 0.48, reformation: 0.64, responsiveness: 0.35, calmness: 0.82, dataStructure: 0.32, patternSubtlety: 0.74, negativeSpace: 0.56, edgeSoftness: 0.8, depth: 0.55, grain: 0.48 },
+          night: { particleColor: "#d9ded9", backgroundColor: "#161817", fade: 0.18, turbulence: 0.5, axis: "diagonal", shape: "wave", coverage: 0.82, formationScale: 1.26, ambientParticles: 0.42, spread: 1.08, scatter: 0.56, coordination: 0.72, gathering: 0.38, dispersal: 0.62, reformation: 0.7, responsiveness: 0.52, calmness: 0.66, dataStructure: 0.48, patternSubtlety: 0.62, negativeSpace: 0.36, edgeSoftness: 0.72, depth: 0.78, grain: 0.38 },
+          warm: { particleColor: "#5b5146", backgroundColor: "#f7f1e8", fade: 0.26, turbulence: 0.36, axis: "horizontal", shape: "veil", coverage: 0.68, formationScale: 1.14, ambientParticles: 0.38, spread: 1, scatter: 0.36, coordination: 0.86, gathering: 0.5, dispersal: 0.38, reformation: 0.58, responsiveness: 0.25, calmness: 0.9, dataStructure: 0.22, patternSubtlety: 0.82, negativeSpace: 0.64, edgeSoftness: 0.86, depth: 0.45, grain: 0.52 }
         };
         Object.assign(settings, presets[button.dataset.preset]);
         document.getElementById("particleColor").value = settings.particleColor;
