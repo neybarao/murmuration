@@ -2,7 +2,9 @@
 
 Configurable Canvas 2D particle background generator inspired by murmuration forms.
 
-The interface lets you tune particle count, speed, turbulence, axis, shape, spread, scatter, colors, and trail behavior. It exports a small JavaScript module that can be embedded as a background in any web application.
+The interface lets you tune particle count, speed, axis, shape, spread, scatter, colors, and trail behavior. It also includes semantic controls derived from the source prompt: coordination, gathering, dispersal, reformation, responsiveness, calmness, data structure, pattern subtlety, negative space, edge softness, depth, and grain.
+
+The exported output is a small JavaScript module using Canvas 2D. It is designed to be embedded as a background in any web application.
 
 ## Local Preview
 
