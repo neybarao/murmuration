@@ -63,7 +63,7 @@
 
     .hud {
       position: absolute;
-      left: 22px;
+      left: 70px;
       top: 18px;
       display: flex;
       gap: 8px;
@@ -75,6 +75,16 @@
       backdrop-filter: blur(8px);
       font-size: 12px;
       color: var(--muted);
+    }
+
+    .brand-logo {
+      position: absolute;
+      left: 22px;
+      top: 18px;
+      z-index: 4;
+      width: 34px;
+      height: 34px;
+      pointer-events: none;
     }
 
     .stage-actions {
@@ -281,6 +291,7 @@
       .app.is-panel-hidden { grid-template-columns: 1fr; }
       canvas { height: 58vh; }
       .interface-overlay { width: min(88vw, 560px); }
+      .hud { left: 64px; }
       aside {
         height: auto;
         border-left: 0;
@@ -296,6 +307,7 @@
   <main class="app" id="app" data-theme="light">
     <section class="stage" aria-label="Effect preview">
       <canvas id="murmuration"></canvas>
+      <img class="brand-logo" src="assets/animated-logo.svg" alt="Animated brand logo">
       <img class="interface-overlay is-visible" id="interfaceOverlay" src="assets/nsiq-overlay-light.svg" alt="Interface overlay preview">
       <div class="hud"><span class="dot"></span><span id="readout">16000 particles</span></div>
       <div class="stage-actions">
