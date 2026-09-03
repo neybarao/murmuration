@@ -61,6 +61,23 @@
       color: var(--muted);
     }
 
+    .interface-overlay {
+      position: absolute;
+      left: 50%;
+      top: 50%;
+      width: min(78vw, 656px);
+      height: auto;
+      transform: translate(-50%, -50%);
+      opacity: 0;
+      pointer-events: none;
+      filter: drop-shadow(0 18px 44px color-mix(in oklch, var(--ink), transparent 88%));
+      transition: opacity 180ms ease-out;
+    }
+
+    .interface-overlay.is-visible {
+      opacity: 1;
+    }
+
     .dot {
       width: 7px;
       height: 7px;
@@ -192,16 +209,23 @@
 
     .preset-row {
       display: grid;
-      grid-template-columns: repeat(3, 1fr);
+      grid-template-columns: repeat(4, 1fr);
       gap: 8px;
     }
 
     .preset-row button { font-size: 12px; }
 
+    .preset-row button.is-active {
+      border-color: color-mix(in oklch, var(--accent), black 10%);
+      background: color-mix(in oklch, var(--accent), white 84%);
+      color: color-mix(in oklch, var(--accent), black 28%);
+    }
+
     @media (max-width: 900px) {
       body { overflow: auto; }
       .app { grid-template-columns: 1fr; }
       canvas { height: 58vh; }
+      .interface-overlay { width: min(88vw, 560px); }
       aside {
         height: auto;
         border-left: 0;
@@ -214,6 +238,7 @@
   <main class="app">
     <section class="stage" aria-label="Effect preview">
       <canvas id="murmuration"></canvas>
+      <img class="interface-overlay" id="interfaceOverlay" src="assets/nsiq-input.png" alt="Interface overlay preview">
       <div class="hud"><span class="dot"></span><span id="readout">16000 particles</span></div>
     </section>
     <aside>
@@ -226,6 +251,7 @@
           <button data-preset="paper">Paper</button>
           <button data-preset="night">Night</button>
           <button data-preset="warm">Warm</button>
+          <button id="overlayToggle" type="button" aria-pressed="false">Overlay</button>
         </div>
       </div>
 
@@ -273,6 +299,8 @@
     const ctx = canvas.getContext("2d", { alpha: false });
     const readout = document.getElementById("readout");
     const exportCode = document.getElementById("exportCode");
+    const interfaceOverlay = document.getElementById("interfaceOverlay");
+    const overlayToggle = document.getElementById("overlayToggle");
 
     const settings = {
       particles: 16000,
@@ -724,6 +752,12 @@
       a.download = "murmuration-background.js";
       a.click();
       URL.revokeObjectURL(url);
+    });
+
+    overlayToggle.addEventListener("click", () => {
+      const isVisible = interfaceOverlay.classList.toggle("is-visible");
+      overlayToggle.classList.toggle("is-active", isVisible);
+      overlayToggle.setAttribute("aria-pressed", String(isVisible));
     });
 
     refreshExport();
