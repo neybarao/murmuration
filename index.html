@@ -32,6 +32,10 @@
       min-height: 100vh;
     }
 
+    .app.is-panel-hidden {
+      grid-template-columns: minmax(0, 1fr) 0;
+    }
+
     .stage {
       position: relative;
       min-width: 0;
@@ -59,6 +63,22 @@
       backdrop-filter: blur(8px);
       font-size: 12px;
       color: var(--muted);
+    }
+
+    .panel-toggle {
+      position: absolute;
+      right: 22px;
+      top: 18px;
+      z-index: 4;
+      width: auto;
+      min-height: 34px;
+      padding: 0 12px;
+      border-color: color-mix(in oklch, var(--line), var(--ink) 8%);
+      background: color-mix(in oklch, var(--paper), transparent 10%);
+      backdrop-filter: blur(8px);
+      box-shadow: 0 10px 28px color-mix(in oklch, var(--ink), transparent 92%);
+      font-size: 12px;
+      color: var(--ink);
     }
 
     .interface-overlay {
@@ -92,6 +112,14 @@
       border-left: 1px solid var(--line);
       background: var(--panel);
       padding: 18px;
+      transition: opacity 180ms ease-out, transform 180ms ease-out;
+    }
+
+    .app.is-panel-hidden aside {
+      opacity: 0;
+      transform: translateX(18px);
+      pointer-events: none;
+      overflow: hidden;
     }
 
     h1 {
@@ -224,6 +252,7 @@
     @media (max-width: 900px) {
       body { overflow: auto; }
       .app { grid-template-columns: 1fr; }
+      .app.is-panel-hidden { grid-template-columns: 1fr; }
       canvas { height: 58vh; }
       .interface-overlay { width: min(88vw, 560px); }
       aside {
@@ -231,17 +260,21 @@
         border-left: 0;
         border-top: 1px solid var(--line);
       }
+      .app.is-panel-hidden aside {
+        display: none;
+      }
     }
   </style>
 </head>
 <body>
-  <main class="app">
+  <main class="app" id="app">
     <section class="stage" aria-label="Effect preview">
       <canvas id="murmuration"></canvas>
       <img class="interface-overlay" id="interfaceOverlay" src="assets/nsiq-input.png" alt="Interface overlay preview">
       <div class="hud"><span class="dot"></span><span id="readout">16000 particles</span></div>
+      <button class="panel-toggle" id="panelToggle" type="button" aria-controls="settingsPanel" aria-expanded="true">Hide panel</button>
     </section>
-    <aside>
+    <aside id="settingsPanel">
       <h1>Murmuration Lab</h1>
       <p class="sub">An exportable particle background for web interfaces. Tune the motion, silhouette, axis, color, and density, then copy the generated Canvas module.</p>
 
@@ -301,6 +334,8 @@
     const exportCode = document.getElementById("exportCode");
     const interfaceOverlay = document.getElementById("interfaceOverlay");
     const overlayToggle = document.getElementById("overlayToggle");
+    const app = document.getElementById("app");
+    const panelToggle = document.getElementById("panelToggle");
 
     const settings = {
       particles: 16000,
@@ -758,6 +793,13 @@
       const isVisible = interfaceOverlay.classList.toggle("is-visible");
       overlayToggle.classList.toggle("is-active", isVisible);
       overlayToggle.setAttribute("aria-pressed", String(isVisible));
+    });
+
+    panelToggle.addEventListener("click", () => {
+      const isHidden = app.classList.toggle("is-panel-hidden");
+      panelToggle.textContent = isHidden ? "Show panel" : "Hide panel";
+      panelToggle.setAttribute("aria-expanded", String(!isHidden));
+      requestAnimationFrame(resize);
     });
 
     refreshExport();
