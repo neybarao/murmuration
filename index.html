@@ -1,0 +1,616 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Murmuration Lab</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --ink: oklch(22% 0.01 245);
+      --muted: oklch(49% 0.012 245);
+      --line: oklch(86% 0.008 245);
+      --panel: oklch(97% 0.004 245);
+      --paper: oklch(99% 0.004 245);
+      --accent: oklch(45% 0.12 212);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      background: var(--paper);
+      color: var(--ink);
+      overflow: hidden;
+    }
+
+    .app {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) 360px;
+      min-height: 100vh;
+    }
+
+    .stage {
+      position: relative;
+      min-width: 0;
+      background: oklch(98.8% 0.003 245);
+    }
+
+    canvas {
+      display: block;
+      width: 100%;
+      height: 100vh;
+      cursor: crosshair;
+    }
+
+    .hud {
+      position: absolute;
+      left: 22px;
+      top: 18px;
+      display: flex;
+      gap: 8px;
+      align-items: center;
+      padding: 8px 10px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: color-mix(in oklch, var(--paper), transparent 12%);
+      backdrop-filter: blur(8px);
+      font-size: 12px;
+      color: var(--muted);
+    }
+
+    .dot {
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      background: var(--accent);
+      box-shadow: 0 0 0 4px color-mix(in oklch, var(--accent), transparent 82%);
+    }
+
+    aside {
+      height: 100vh;
+      overflow: auto;
+      border-left: 1px solid var(--line);
+      background: var(--panel);
+      padding: 18px;
+    }
+
+    h1 {
+      margin: 0 0 4px;
+      font-size: 18px;
+      line-height: 1.2;
+      letter-spacing: 0;
+      font-weight: 650;
+    }
+
+    .sub {
+      margin: 0 0 18px;
+      color: var(--muted);
+      font-size: 13px;
+      line-height: 1.45;
+    }
+
+    .group {
+      padding: 14px 0 16px;
+      border-top: 1px solid var(--line);
+    }
+
+    .group-title {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 12px;
+      font-size: 12px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: .08em;
+      color: oklch(38% 0.012 245);
+    }
+
+    label {
+      display: grid;
+      grid-template-columns: 1fr auto;
+      gap: 10px;
+      align-items: center;
+      margin: 11px 0;
+      font-size: 13px;
+      color: var(--ink);
+    }
+
+    .value {
+      min-width: 54px;
+      text-align: right;
+      color: var(--muted);
+      font-variant-numeric: tabular-nums;
+      font-size: 12px;
+    }
+
+    input[type="range"] {
+      grid-column: 1 / -1;
+      width: 100%;
+      accent-color: var(--accent);
+    }
+
+    input[type="color"] {
+      inline-size: 34px;
+      block-size: 28px;
+      padding: 0;
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      background: transparent;
+    }
+
+    select, button, textarea {
+      width: 100%;
+      border: 1px solid var(--line);
+      border-radius: 7px;
+      background: oklch(99% 0.004 245);
+      color: var(--ink);
+      font: inherit;
+    }
+
+    select, button {
+      min-height: 34px;
+      padding: 0 10px;
+    }
+
+    button {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 7px;
+      font-weight: 620;
+      cursor: pointer;
+      transition: background 160ms ease-out, border-color 160ms ease-out, transform 160ms ease-out;
+    }
+
+    button:hover { background: oklch(96% 0.007 245); }
+    button:active { transform: translateY(1px); }
+    button.primary {
+      border-color: color-mix(in oklch, var(--accent), black 12%);
+      background: var(--accent);
+      color: oklch(99% 0.004 245);
+    }
+    button.primary:hover { background: color-mix(in oklch, var(--accent), black 8%); }
+
+    .actions {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+      margin-top: 12px;
+    }
+
+    textarea {
+      min-height: 190px;
+      resize: vertical;
+      padding: 10px;
+      font: 11px/1.45 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      color: oklch(29% 0.01 245);
+    }
+
+    .preset-row {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 8px;
+    }
+
+    .preset-row button { font-size: 12px; }
+
+    @media (max-width: 900px) {
+      body { overflow: auto; }
+      .app { grid-template-columns: 1fr; }
+      canvas { height: 58vh; }
+      aside {
+        height: auto;
+        border-left: 0;
+        border-top: 1px solid var(--line);
+      }
+    }
+  </style>
+</head>
+<body>
+  <main class="app">
+    <section class="stage" aria-label="Effect preview">
+      <canvas id="murmuration"></canvas>
+      <div class="hud"><span class="dot"></span><span id="readout">16000 particles</span></div>
+    </section>
+    <aside>
+      <h1>Murmuration Lab</h1>
+      <p class="sub">An exportable particle background for web interfaces. Tune the motion, silhouette, axis, color, and density, then copy the generated Canvas module.</p>
+
+      <div class="group">
+        <div class="group-title">Presets</div>
+        <div class="preset-row">
+          <button data-preset="paper">Paper</button>
+          <button data-preset="night">Night</button>
+          <button data-preset="warm">Warm</button>
+        </div>
+      </div>
+
+      <div class="group" id="controls"></div>
+
+      <div class="group">
+        <div class="group-title">Composition</div>
+        <label>Axis
+          <select id="axis">
+            <option value="horizontal">Horizontal</option>
+            <option value="vertical">Vertical</option>
+            <option value="diagonal">Diagonal</option>
+          </select>
+        </label>
+        <label>Shape
+          <select id="shape">
+            <option value="ridge">Ridge</option>
+            <option value="wave">Wave</option>
+            <option value="arch">Arch</option>
+            <option value="vortex">Vortex</option>
+            <option value="veil">Veil</option>
+          </select>
+        </label>
+      </div>
+
+      <div class="group">
+        <div class="group-title">Colors</div>
+        <label>Particles <input type="color" id="particleColor" value="#394044"></label>
+        <label>Background <input type="color" id="backgroundColor" value="#fafafa"></label>
+      </div>
+
+      <div class="group">
+        <div class="group-title">Export</div>
+        <textarea id="exportCode" spellcheck="false"></textarea>
+        <div class="actions">
+          <button id="copyBtn" class="primary">Copy</button>
+          <button id="downloadBtn">Download JS</button>
+        </div>
+      </div>
+    </aside>
+  </main>
+
+  <script>
+    const canvas = document.getElementById("murmuration");
+    const ctx = canvas.getContext("2d", { alpha: false });
+    const readout = document.getElementById("readout");
+    const exportCode = document.getElementById("exportCode");
+
+    const settings = {
+      particles: 16000,
+      speed: 0.55,
+      turbulence: 0.42,
+      rotation: 0,
+      axis: "horizontal",
+      shape: "ridge",
+      spread: 0.88,
+      scatter: 0.34,
+      crest: 0.62,
+      arch: 0.54,
+      density: 0.72,
+      particleSize: 0.72,
+      fade: 0.22,
+      particleColor: "#394044",
+      backgroundColor: "#fafafa"
+    };
+
+    const controls = [
+      ["particles", "Particles", 2000, 32000, 1000],
+      ["speed", "Speed", 0, 2, 0.01],
+      ["turbulence", "Turbulence", 0, 1.4, 0.01],
+      ["rotation", "Rotation", -35, 35, 1],
+      ["spread", "Spread", 0.35, 1.4, 0.01],
+      ["scatter", "Scatter", 0, 1.2, 0.01],
+      ["crest", "Crest", 0.1, 1.1, 0.01],
+      ["arch", "Opening", 0.1, 1.1, 0.01],
+      ["density", "Density", 0.1, 1, 0.01],
+      ["particleSize", "Particle size", 0.35, 1.8, 0.01],
+      ["fade", "Trail", 0.04, 0.5, 0.01]
+    ];
+
+    const particles = [];
+    let w = 1;
+    let h = 1;
+    let dpr = 1;
+    let t = 0;
+    let animationId = 0;
+
+    function rand(seed) {
+      const x = Math.sin(seed * 127.1) * 43758.5453123;
+      return x - Math.floor(x);
+    }
+
+    function resize() {
+      const box = canvas.getBoundingClientRect();
+      dpr = Math.min(window.devicePixelRatio || 1, 2);
+      w = Math.max(1, Math.floor(box.width));
+      h = Math.max(1, Math.floor(box.height));
+      canvas.width = Math.floor(w * dpr);
+      canvas.height = Math.floor(h * dpr);
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      syncParticleCount();
+      clearFrame();
+    }
+
+    function syncParticleCount() {
+      while (particles.length < settings.particles) particles.push(makeParticle(particles.length + 1));
+      particles.length = settings.particles;
+      readout.textContent = `${settings.particles.toLocaleString("en-US")} particles`;
+    }
+
+    function makeParticle(i) {
+      const r = Math.sqrt(Math.random());
+      const a = Math.random() * Math.PI * 2;
+      return {
+        x: w * 0.5 + Math.cos(a) * r * w * 0.42,
+        y: h * 0.58 + Math.sin(a) * r * h * 0.28,
+        vx: (Math.random() - 0.5) * 0.6,
+        vy: (Math.random() - 0.5) * 0.6,
+        seed: i * 13.37 + Math.random() * 900
+      };
+    }
+
+    function targetFor(p, phase) {
+      const n = (rand(p.seed + Math.floor(phase * 0.018)) - 0.5) * (settings.turbulence + settings.scatter);
+      const u = ((p.seed * 0.618033 + phase * 0.00035) % 1) * 2 - 1;
+      const abs = Math.abs(u);
+      const crest = Math.exp(-abs * abs * 5.4) * h * 0.36 * settings.crest;
+      const wing = Math.pow(abs, 1.7) * h * 0.24 * settings.arch;
+      const band = h * (0.035 + 0.19 * settings.density * (1 - Math.exp(-abs * 3.2)));
+      let x = w * 0.5 + u * w * 0.54 * settings.spread;
+      let y = h * (0.62 + 0.09 * Math.sin(u * Math.PI + phase * 0.002)) - crest + wing + n * band;
+
+      if (settings.shape === "wave") {
+        y = h * 0.55 + Math.sin(u * Math.PI * 1.4 + phase * 0.0025) * h * 0.2 * settings.crest + n * band;
+      } else if (settings.shape === "arch") {
+        y = h * 0.68 - Math.sin((1 - abs) * Math.PI) * h * 0.34 * settings.crest + n * band;
+      } else if (settings.shape === "vortex") {
+        const turn = u * Math.PI * 2.4 + phase * 0.003 + p.seed * 0.01;
+        const radius = (0.12 + abs * 0.42 + n * 0.04) * Math.min(w, h) * settings.spread;
+        x = w * 0.5 + Math.cos(turn) * radius;
+        y = h * 0.54 + Math.sin(turn) * radius * (0.5 + settings.arch * 0.5);
+      } else if (settings.shape === "veil") {
+        y = h * (0.5 + u * 0.28) + Math.sin(u * Math.PI * 3 + phase * 0.002) * h * 0.09 * settings.crest + n * band * 1.25;
+      }
+
+      x += (rand(p.seed + 101) - 0.5) * w * 0.08 * settings.scatter;
+      y += (rand(p.seed + 202) - 0.5) * h * 0.08 * settings.scatter;
+
+      const hollow = Math.exp(-u * u * 18) * settings.arch;
+      if (rand(p.seed + 42) < hollow * 0.55) y += h * (0.13 + 0.16 * rand(p.seed + 9));
+
+      const angle = settings.rotation * Math.PI / 180;
+      const cx = w * 0.5;
+      const cy = h * 0.55;
+      const dx = x - cx;
+      const dy = y - cy;
+      if (settings.axis === "vertical") {
+        x = cx + dy;
+        y = cy + dx;
+      } else if (settings.axis === "diagonal") {
+        const diagonal = Math.PI / 4;
+        x = cx + dx * Math.cos(diagonal) - dy * Math.sin(diagonal);
+        y = cy + dx * Math.sin(diagonal) + dy * Math.cos(diagonal);
+      }
+      const rdx = x - cx;
+      const rdy = y - cy;
+      return {
+        x: cx + rdx * Math.cos(angle) - rdy * Math.sin(angle),
+        y: cy + rdx * Math.sin(angle) + rdy * Math.cos(angle)
+      };
+    }
+
+    function clearFrame() {
+      ctx.globalAlpha = 1;
+      ctx.fillStyle = settings.backgroundColor;
+      ctx.fillRect(0, 0, w, h);
+    }
+
+    function draw() {
+      t += 16 * settings.speed;
+      ctx.fillStyle = settings.backgroundColor;
+      ctx.globalAlpha = settings.fade;
+      ctx.fillRect(0, 0, w, h);
+      ctx.globalAlpha = 1;
+      ctx.fillStyle = settings.particleColor;
+
+      for (let i = 0; i < particles.length; i++) {
+        const p = particles[i];
+        const target = targetFor(p, t);
+        const flow = Math.sin((p.x * 0.006) + (p.y * 0.004) + t * 0.004 + p.seed);
+        p.vx += (target.x - p.x) * 0.0028 + Math.cos(flow + p.seed) * 0.018 * settings.turbulence;
+        p.vy += (target.y - p.y) * 0.0028 + Math.sin(flow * 1.7) * 0.014 * settings.turbulence;
+        p.vx *= 0.91;
+        p.vy *= 0.91;
+        p.x += p.vx * settings.speed;
+        p.y += p.vy * settings.speed;
+
+        if (p.x < -20 || p.x > w + 20 || p.y < -20 || p.y > h + 20) {
+          const fresh = makeParticle(p.seed);
+          p.x = fresh.x;
+          p.y = fresh.y;
+          p.vx = fresh.vx;
+          p.vy = fresh.vy;
+        }
+        ctx.globalAlpha = 0.18 + 0.68 * rand(p.seed + Math.floor(t * 0.002));
+        ctx.fillRect(p.x, p.y, settings.particleSize, settings.particleSize);
+      }
+      ctx.globalAlpha = 1;
+      animationId = requestAnimationFrame(draw);
+    }
+
+    function controlMarkup() {
+      return `<div class="group-title">Shape and motion</div>` + controls.map(([key, label, min, max, step]) => `
+        <label>
+          ${label}
+          <span class="value" id="${key}Value">${settings[key]}</span>
+          <input type="range" id="${key}" min="${min}" max="${max}" step="${step}" value="${settings[key]}">
+        </label>`).join("");
+    }
+
+    function refreshExport() {
+      const options = JSON.stringify(settings, null, 2);
+      exportCode.value = `<div id="murmuration-bg"></div>
+<script type="module">
+  import { createMurmurationBackground } from "./murmuration-background.js";
+  createMurmurationBackground(document.querySelector("#murmuration-bg"), ${options});
+<\/script>`;
+    }
+
+    function exportedModule() {
+      return `export function createMurmurationBackground(el, options = {}) {
+  const settings = ${JSON.stringify(settings, null, 2)};
+  Object.assign(settings, options);
+  const canvas = document.createElement("canvas");
+  const ctx = canvas.getContext("2d", { alpha: false });
+  Object.assign(el.style, { position: "absolute", inset: "0", overflow: "hidden", zIndex: "-1" });
+  Object.assign(canvas.style, { width: "100%", height: "100%", display: "block" });
+  el.appendChild(canvas);
+  const particles = [];
+  let w = 1, h = 1, dpr = 1, t = 0, animationId = 0;
+  const rand = seed => {
+    const x = Math.sin(seed * 127.1) * 43758.5453123;
+    return x - Math.floor(x);
+  };
+  const makeParticle = i => {
+    const r = Math.sqrt(Math.random()), a = Math.random() * Math.PI * 2;
+    return { x: w * .5 + Math.cos(a) * r * w * .42, y: h * .58 + Math.sin(a) * r * h * .28, vx: (Math.random() - .5) * .6, vy: (Math.random() - .5) * .6, seed: i * 13.37 + Math.random() * 900 };
+  };
+  const targetFor = p => {
+    const n = (rand(p.seed + Math.floor(t * .018)) - .5) * (settings.turbulence + settings.scatter);
+    const u = ((p.seed * .618033 + t * .00035) % 1) * 2 - 1;
+    const abs = Math.abs(u), crest = Math.exp(-abs * abs * 5.4) * h * .36 * settings.crest;
+    const wing = Math.pow(abs, 1.7) * h * .24 * settings.arch;
+    const band = h * (.035 + .19 * settings.density * (1 - Math.exp(-abs * 3.2)));
+    let x = w * .5 + u * w * .54 * settings.spread, y = h * (.62 + .09 * Math.sin(u * Math.PI + t * .002)) - crest + wing + n * band;
+    if (settings.shape === "wave") {
+      y = h * .55 + Math.sin(u * Math.PI * 1.4 + t * .0025) * h * .2 * settings.crest + n * band;
+    } else if (settings.shape === "arch") {
+      y = h * .68 - Math.sin((1 - abs) * Math.PI) * h * .34 * settings.crest + n * band;
+    } else if (settings.shape === "vortex") {
+      const turn = u * Math.PI * 2.4 + t * .003 + p.seed * .01;
+      const radius = (.12 + abs * .42 + n * .04) * Math.min(w, h) * settings.spread;
+      x = w * .5 + Math.cos(turn) * radius;
+      y = h * .54 + Math.sin(turn) * radius * (.5 + settings.arch * .5);
+    } else if (settings.shape === "veil") {
+      y = h * (.5 + u * .28) + Math.sin(u * Math.PI * 3 + t * .002) * h * .09 * settings.crest + n * band * 1.25;
+    }
+    x += (rand(p.seed + 101) - .5) * w * .08 * settings.scatter;
+    y += (rand(p.seed + 202) - .5) * h * .08 * settings.scatter;
+    const hollow = Math.exp(-u * u * 18) * settings.arch;
+    if (rand(p.seed + 42) < hollow * .55) y += h * (.13 + .16 * rand(p.seed + 9));
+    const angle = settings.rotation * Math.PI / 180, cx = w * .5, cy = h * .55, dx = x - cx, dy = y - cy;
+    if (settings.axis === "vertical") {
+      x = cx + dy; y = cy + dx;
+    } else if (settings.axis === "diagonal") {
+      const diagonal = Math.PI / 4;
+      x = cx + dx * Math.cos(diagonal) - dy * Math.sin(diagonal);
+      y = cy + dx * Math.sin(diagonal) + dy * Math.cos(diagonal);
+    }
+    const rdx = x - cx, rdy = y - cy;
+    return { x: cx + rdx * Math.cos(angle) - rdy * Math.sin(angle), y: cy + rdx * Math.sin(angle) + rdy * Math.cos(angle) };
+  };
+  function resize() {
+    const box = el.getBoundingClientRect();
+    dpr = Math.min(window.devicePixelRatio || 1, 2);
+    w = Math.max(1, Math.floor(box.width)); h = Math.max(1, Math.floor(box.height));
+    canvas.width = Math.floor(w * dpr); canvas.height = Math.floor(h * dpr);
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    while (particles.length < settings.particles) particles.push(makeParticle(particles.length + 1));
+    particles.length = settings.particles;
+    ctx.globalAlpha = 1; ctx.fillStyle = settings.backgroundColor; ctx.fillRect(0, 0, w, h);
+  }
+  function frame() {
+    t += 16 * settings.speed;
+    ctx.globalAlpha = settings.fade; ctx.fillStyle = settings.backgroundColor; ctx.fillRect(0, 0, w, h);
+    ctx.globalAlpha = 1; ctx.fillStyle = settings.particleColor;
+    for (const p of particles) {
+      const target = targetFor(p);
+      const flow = Math.sin((p.x * .006) + (p.y * .004) + t * .004 + p.seed);
+      p.vx += (target.x - p.x) * .0028 + Math.cos(flow + p.seed) * .018 * settings.turbulence;
+      p.vy += (target.y - p.y) * .0028 + Math.sin(flow * 1.7) * .014 * settings.turbulence;
+      p.vx *= .91; p.vy *= .91; p.x += p.vx * settings.speed; p.y += p.vy * settings.speed;
+      ctx.globalAlpha = .18 + .68 * rand(p.seed + Math.floor(t * .002));
+      ctx.fillRect(p.x, p.y, settings.particleSize, settings.particleSize);
+    }
+    animationId = requestAnimationFrame(frame);
+  }
+  const onResize = () => resize();
+  addEventListener("resize", onResize);
+  resize();
+  frame();
+  return {
+    canvas,
+    update(nextOptions = {}) { Object.assign(settings, nextOptions); resize(); },
+    destroy() { cancelAnimationFrame(animationId); removeEventListener("resize", onResize); canvas.remove(); }
+  };
+}`;
+    }
+
+    document.getElementById("controls").innerHTML = controlMarkup();
+    controls.forEach(([key]) => {
+      const input = document.getElementById(key);
+      const output = document.getElementById(`${key}Value`);
+      input.addEventListener("input", () => {
+        settings[key] = Number(input.value);
+        output.textContent = settings[key];
+        if (key === "particles") syncParticleCount();
+        refreshExport();
+      });
+    });
+
+    ["particleColor", "backgroundColor"].forEach(key => {
+      document.getElementById(key).addEventListener("input", event => {
+        settings[key] = event.target.value;
+        refreshExport();
+      });
+    });
+
+    ["axis", "shape"].forEach(key => {
+      document.getElementById(key).addEventListener("change", event => {
+        settings[key] = event.target.value;
+        refreshExport();
+        clearFrame();
+      });
+    });
+
+    document.querySelectorAll("[data-preset]").forEach(button => {
+      button.addEventListener("click", () => {
+        const presets = {
+          paper: { particleColor: "#394044", backgroundColor: "#fafafa", fade: 0.22, turbulence: 0.42, axis: "horizontal", shape: "ridge", scatter: 0.34 },
+          night: { particleColor: "#d9ded9", backgroundColor: "#161817", fade: 0.16, turbulence: 0.5, axis: "diagonal", shape: "wave", scatter: 0.48 },
+          warm: { particleColor: "#5b5146", backgroundColor: "#f7f1e8", fade: 0.24, turbulence: 0.36, axis: "horizontal", shape: "veil", scatter: 0.28 }
+        };
+        Object.assign(settings, presets[button.dataset.preset]);
+        document.getElementById("particleColor").value = settings.particleColor;
+        document.getElementById("backgroundColor").value = settings.backgroundColor;
+        document.getElementById("axis").value = settings.axis;
+        document.getElementById("shape").value = settings.shape;
+        controls.forEach(([key]) => {
+          document.getElementById(key).value = settings[key];
+          document.getElementById(`${key}Value`).textContent = settings[key];
+        });
+        refreshExport();
+        clearFrame();
+      });
+    });
+
+    document.getElementById("copyBtn").addEventListener("click", async () => {
+      await navigator.clipboard.writeText(exportCode.value);
+    });
+
+    document.getElementById("downloadBtn").addEventListener("click", () => {
+      const blob = new Blob([exportedModule()], { type: "text/javascript" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = "murmuration-background.js";
+      a.click();
+      URL.revokeObjectURL(url);
+    });
+
+    refreshExport();
+    addEventListener("resize", resize);
+    resize();
+    draw();
+  </script>
+</body>
+</html>
