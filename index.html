@@ -125,6 +125,42 @@
       opacity: 1;
     }
 
+    .ai-response-layer {
+      position: absolute;
+      inset: 0;
+      z-index: 2;
+      pointer-events: none;
+      opacity: 0;
+      transition: opacity 650ms ease;
+    }
+
+    .ai-response-main {
+      position: absolute;
+      left: 50%;
+      top: 50%;
+      width: min(46vw, 656px);
+      max-width: calc(100% - 48px);
+      max-height: calc(100vh - 144px);
+      transform: translate(-50%, -50%);
+      object-fit: contain;
+    }
+
+    .ai-response-footer {
+      position: absolute;
+      left: 50%;
+      bottom: 24px;
+      width: min(calc(100% - 48px), 672px);
+      transform: translateX(-50%);
+    }
+
+    .app.is-ai-response .interface-overlay {
+      opacity: 0;
+    }
+
+    .app.is-ai-response .ai-response-layer {
+      opacity: 1;
+    }
+
     .dot {
       width: 7px;
       height: 7px;
@@ -291,6 +327,8 @@
       .app.is-panel-hidden { grid-template-columns: 1fr; }
       canvas { height: 58vh; }
       .interface-overlay { width: min(88vw, 560px); }
+      .ai-response-main { width: min(88vw, 656px); max-height: calc(58vh - 100px); }
+      .ai-response-footer { bottom: 16px; width: min(calc(100% - 32px), 672px); }
       .hud { left: 64px; }
       aside {
         height: auto;
@@ -309,8 +347,13 @@
       <canvas id="murmuration"></canvas>
       <img class="brand-logo" src="assets/animated-logo.svg" alt="Animated brand logo">
       <img class="interface-overlay is-visible" id="interfaceOverlay" src="assets/nsiq-overlay-light.svg" alt="Interface overlay preview">
+      <div class="ai-response-layer" id="aiResponseLayer" aria-hidden="true">
+        <img class="ai-response-main" src="assets/ai-response-main.svg" alt="">
+        <img class="ai-response-footer" src="assets/ai-response-footer.svg" alt="">
+      </div>
       <div class="hud"><span class="dot"></span><span id="readout">16000 particles</span></div>
       <div class="stage-actions">
+        <button id="responseToggle" type="button" aria-pressed="false">AI response</button>
         <button id="themeToggle" type="button" aria-pressed="false">Dark</button>
         <button id="panelToggle" type="button" aria-controls="settingsPanel" aria-expanded="true">Hide panel</button>
       </div>
@@ -383,6 +426,7 @@
     const panelToggle = document.getElementById("panelToggle");
     const themeToggle = document.getElementById("themeToggle");
     const copyPreviewBtn = document.getElementById("copyPreviewBtn");
+    const responseToggle = document.getElementById("responseToggle");
 
     const settings = {
       theme: "light",
@@ -475,6 +519,31 @@
     let dpr = 1;
     let t = 0;
     let animationId = 0;
+    let transitionFrame = 0;
+    let previewState = "information";
+    const stateConfigs = {
+      information: null,
+      response: null
+    };
+
+    const aiResponseDefaults = {
+      coverage: 0.9,
+      formationScale: 1.35,
+      ambientParticles: 0.48,
+      spread: 1.15,
+      scatter: 0.62,
+      coordination: 0.68,
+      gathering: 0.3,
+      dispersal: 0.72,
+      reformation: 0.58,
+      responsiveness: 0.48,
+      calmness: 0.62,
+      turbulence: 0.56,
+      negativeSpace: 0.32,
+      edgeSoftness: 0.72,
+      density: 0.62,
+      fade: 0.18
+    };
 
     function rand(seed) {
       const x = Math.sin(seed * 127.1) * 43758.5453123;
@@ -485,8 +554,22 @@
       return Math.min(max, Math.max(min, value));
     }
 
+    function stateSnapshot(source = settings) {
+      const { theme, ...state } = source;
+      return state;
+    }
+
+    function sharedPreviewState() {
+      return {
+        version: 2,
+        activeState: previewState,
+        theme: settings.theme,
+        states: stateConfigs
+      };
+    }
+
     function encodeSettings() {
-      const json = JSON.stringify(settings);
+      const json = JSON.stringify(sharedPreviewState());
       const bytes = new TextEncoder().encode(json);
       let binary = "";
       bytes.forEach(byte => { binary += String.fromCharCode(byte); });
@@ -513,19 +596,32 @@
       history.replaceState(null, "", url);
     }
 
+    function applyStateConfig(nextState) {
+      Object.assign(settings, nextState, { theme: settings.theme });
+    }
+
     function applySharedConfig() {
       const encoded = new URLSearchParams(location.search).get("config");
-      if (!encoded) return;
+      if (!encoded) return false;
       try {
-        const nextSettings = decodeSettings(encoded);
+        const shared = decodeSettings(encoded);
+        if (shared.version === 2 && shared.states?.information && shared.states?.response) {
+          settings.theme = shared.theme === "dark" ? "dark" : "light";
+          stateConfigs.information = { ...stateSnapshot(), ...shared.states.information };
+          stateConfigs.response = { ...stateSnapshot(), ...aiResponseDefaults, ...shared.states.response };
+          previewState = shared.activeState === "response" ? "response" : "information";
+          applyStateConfig(stateConfigs[previewState]);
+          return true;
+        }
+
+        // Support preview links created before state-specific sharing existed.
         Object.keys(settings).forEach(key => {
-          if (Object.prototype.hasOwnProperty.call(nextSettings, key)) {
-            settings[key] = nextSettings[key];
-          }
+          if (Object.prototype.hasOwnProperty.call(shared, key)) settings[key] = shared[key];
         });
       } catch (error) {
         console.warn("Could not load shared murmuration config.", error);
       }
+      return false;
     }
 
     function syncControlsFromSettings() {
@@ -536,6 +632,8 @@
       overlayToggle.setAttribute("aria-pressed", String(settings.overlay));
       themeToggle.textContent = settings.theme === "dark" ? "Light" : "Dark";
       themeToggle.setAttribute("aria-pressed", String(settings.theme === "dark"));
+      responseToggle.textContent = previewState === "response" ? "Show Information" : "AI Response";
+      responseToggle.setAttribute("aria-pressed", String(previewState === "response"));
       document.getElementById("particleColor").value = settings.particleColor;
       document.getElementById("backgroundColor").value = settings.backgroundColor;
       document.getElementById("axis").value = settings.axis;
@@ -544,6 +642,10 @@
         document.getElementById(key).value = settings[key];
         document.getElementById(`${key}Value`).textContent = settings[key];
       });
+    }
+
+    function saveActiveState() {
+      stateConfigs[previewState] = stateSnapshot();
     }
 
     function resize() {
@@ -662,6 +764,55 @@
       ctx.globalAlpha = 1;
       ctx.fillStyle = settings.backgroundColor;
       ctx.fillRect(0, 0, w, h);
+    }
+
+    function easeOutQuint(value) {
+      return 1 - Math.pow(1 - value, 5);
+    }
+
+    function transitionTo(nextState, duration = 5000) {
+      cancelAnimationFrame(transitionFrame);
+      const start = performance.now();
+      const previous = { ...settings };
+      const nextSettings = { ...nextState, theme: settings.theme };
+      const immediateKeys = ["particles", "ambientParticles", "shape", "axis", "overlay", "particleColor", "backgroundColor"];
+      const numericKeys = Object.keys(nextSettings).filter(key =>
+        typeof previous[key] === "number" &&
+        typeof nextSettings[key] === "number" &&
+        !immediateKeys.includes(key)
+      );
+
+      immediateKeys.forEach(key => { settings[key] = nextSettings[key]; });
+      syncParticleCount();
+      syncControlsFromSettings();
+
+      function tick(now) {
+        const progress = Math.min(1, (now - start) / duration);
+        const eased = easeOutQuint(progress);
+        numericKeys.forEach(key => {
+          settings[key] = previous[key] + (nextSettings[key] - previous[key]) * eased;
+        });
+        if (progress < 1) {
+          transitionFrame = requestAnimationFrame(tick);
+        } else {
+          Object.assign(settings, nextSettings);
+          syncParticleCount();
+          saveActiveState();
+          syncControlsFromSettings();
+          refreshExport();
+          updatePreviewUrl();
+        }
+      }
+      transitionFrame = requestAnimationFrame(tick);
+    }
+
+    function setPreviewState(nextState) {
+      if (nextState === previewState) return;
+      saveActiveState();
+      previewState = nextState;
+      app.classList.toggle("is-ai-response", previewState === "response");
+      transitionTo(stateConfigs[previewState]);
+      syncControlsFromSettings();
     }
 
     function draw() {
@@ -848,7 +999,12 @@
     }
 
     document.getElementById("controls").innerHTML = controlMarkup();
-    applySharedConfig();
+    const hasSharedStates = applySharedConfig();
+    if (!hasSharedStates) {
+      stateConfigs.information = stateSnapshot();
+      stateConfigs.response = { ...stateSnapshot(), ...aiResponseDefaults };
+    }
+    app.classList.toggle("is-ai-response", previewState === "response");
     syncControlsFromSettings();
     controls.forEach(([key]) => {
       const input = document.getElementById(key);
@@ -857,6 +1013,7 @@
         settings[key] = Number(input.value);
         output.textContent = settings[key];
         if (key === "particles" || key === "ambientParticles") syncParticleCount();
+        saveActiveState();
         refreshExport();
         updatePreviewUrl();
       });
@@ -865,6 +1022,7 @@
     ["particleColor", "backgroundColor"].forEach(key => {
       document.getElementById(key).addEventListener("input", event => {
         settings[key] = event.target.value;
+        saveActiveState();
         refreshExport();
         updatePreviewUrl();
       });
@@ -873,6 +1031,7 @@
     ["axis", "shape"].forEach(key => {
       document.getElementById(key).addEventListener("change", event => {
         settings[key] = event.target.value;
+        saveActiveState();
         refreshExport();
         clearFrame();
         updatePreviewUrl();
@@ -889,6 +1048,7 @@
         Object.assign(settings, presets[button.dataset.preset]);
         syncControlsFromSettings();
         syncParticleCount();
+        saveActiveState();
         refreshExport();
         clearFrame();
         updatePreviewUrl();
@@ -918,6 +1078,7 @@
     overlayToggle.addEventListener("click", () => {
       settings.overlay = !settings.overlay;
       syncControlsFromSettings();
+      saveActiveState();
       updatePreviewUrl();
     });
 
@@ -933,6 +1094,7 @@
         settings.fade = Math.max(settings.fade, 0.22);
       }
       syncControlsFromSettings();
+      saveActiveState();
       refreshExport();
       clearFrame();
       updatePreviewUrl();
@@ -943,6 +1105,10 @@
       panelToggle.textContent = isHidden ? "Show panel" : "Hide panel";
       panelToggle.setAttribute("aria-expanded", String(!isHidden));
       requestAnimationFrame(resize);
+    });
+
+    responseToggle.addEventListener("click", () => {
+      setPreviewState(previewState === "response" ? "information" : "response");
     });
 
     refreshExport();
