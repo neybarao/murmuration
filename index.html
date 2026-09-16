@@ -157,7 +157,7 @@
       opacity: 0;
     }
 
-    .app.is-ai-response .ai-response-layer {
+    .app.is-ai-response .ai-response-layer.is-visible {
       opacity: 1;
     }
 
@@ -421,6 +421,7 @@
     const readout = document.getElementById("readout");
     const exportCode = document.getElementById("exportCode");
     const interfaceOverlay = document.getElementById("interfaceOverlay");
+    const aiResponseLayer = document.getElementById("aiResponseLayer");
     const overlayToggle = document.getElementById("overlayToggle");
     const app = document.getElementById("app");
     const panelToggle = document.getElementById("panelToggle");
@@ -459,6 +460,7 @@
       density: 0.72,
       particleSize: 0.72,
       fade: 0.22,
+      centerAttenuation: 0,
       particleColor: "#C2C2C2",
       backgroundColor: "#FFFFFF"
     };
@@ -506,6 +508,7 @@
         controls: [
           ["particleSize", "Particle size", 0.35, 1.8, 0.01],
           ["fade", "Trail", 0.04, 0.5, 0.01],
+          ["centerAttenuation", "Center attenuation", 0, 1, 0.01],
           ["depth", "Depth", 0, 1, 0.01],
           ["grain", "Grain", 0, 1, 0.01]
         ]
@@ -542,7 +545,8 @@
       negativeSpace: 0.32,
       edgeSoftness: 0.72,
       density: 0.62,
-      fade: 0.18
+      fade: 0.18,
+      centerAttenuation: 0
     };
 
     function rand(seed) {
@@ -552,6 +556,17 @@
 
     function clamp(value, min, max) {
       return Math.min(max, Math.max(min, value));
+    }
+
+    function smoothstep(min, max, value) {
+      const progress = clamp((value - min) / (max - min), 0, 1);
+      return progress * progress * (3 - 2 * progress);
+    }
+
+    function centerAttenuationAt(x) {
+      const horizontalPosition = x / w;
+      const centerBand = smoothstep(0.15, 0.25, horizontalPosition) * (1 - smoothstep(0.75, 0.85, horizontalPosition));
+      return 1 - centerBand * settings.centerAttenuation * 0.78;
     }
 
     function stateSnapshot(source = settings) {
@@ -628,6 +643,8 @@
       app.dataset.theme = settings.theme;
       interfaceOverlay.src = settings.theme === "dark" ? "assets/nsiq-overlay-dark.svg" : "assets/nsiq-overlay-light.svg";
       interfaceOverlay.classList.toggle("is-visible", settings.overlay);
+      aiResponseLayer.classList.toggle("is-visible", settings.overlay);
+      aiResponseLayer.setAttribute("aria-hidden", String(!settings.overlay));
       overlayToggle.classList.toggle("is-active", settings.overlay);
       overlayToggle.setAttribute("aria-pressed", String(settings.overlay));
       themeToggle.textContent = settings.theme === "dark" ? "Light" : "Dark";
@@ -847,7 +864,8 @@
         const flicker = rand(p.seed + Math.floor(t * 0.002));
         const depth = 0.32 + settings.depth * 0.5 * rand(p.seed + 33);
         const fieldOpacity = p.field ? 0.34 + settings.coverage * 0.22 : 1;
-        ctx.globalAlpha = clamp((0.12 + depth + flicker * settings.grain * 0.34) * fieldOpacity, 0.04, 0.92);
+        const opacity = (0.12 + depth + flicker * settings.grain * 0.34) * fieldOpacity * centerAttenuationAt(p.x);
+        ctx.globalAlpha = clamp(opacity, 0.04, 0.92);
         ctx.fillRect(p.x, p.y, settings.particleSize, settings.particleSize);
       }
       ctx.globalAlpha = 1;
@@ -886,6 +904,16 @@
   const rand = seed => {
     const x = Math.sin(seed * 127.1) * 43758.5453123;
     return x - Math.floor(x);
+  };
+  const clamp = (value, min, max) => Math.min(max, Math.max(min, value));
+  const smoothstep = (min, max, value) => {
+    const progress = clamp((value - min) / (max - min), 0, 1);
+    return progress * progress * (3 - 2 * progress);
+  };
+  const centerAttenuationAt = x => {
+    const horizontalPosition = x / w;
+    const centerBand = smoothstep(.15, .25, horizontalPosition) * (1 - smoothstep(.75, .85, horizontalPosition));
+    return 1 - centerBand * settings.centerAttenuation * .78;
   };
   const makeParticle = i => {
     const r = Math.sqrt(Math.random()), a = Math.random() * Math.PI * 2;
@@ -981,7 +1009,8 @@
       const flicker = rand(p.seed + Math.floor(t * .002));
       const depth = .32 + settings.depth * .5 * rand(p.seed + 33);
       const fieldOpacity = p.field ? .34 + settings.coverage * .22 : 1;
-      ctx.globalAlpha = Math.min(.92, Math.max(.04, (.12 + depth + flicker * settings.grain * .34) * fieldOpacity));
+      const opacity = (.12 + depth + flicker * settings.grain * .34) * fieldOpacity * centerAttenuationAt(p.x);
+      ctx.globalAlpha = Math.min(.92, Math.max(.04, opacity));
       ctx.fillRect(p.x, p.y, settings.particleSize, settings.particleSize);
     }
     animationId = requestAnimationFrame(frame);
@@ -1041,9 +1070,9 @@
     document.querySelectorAll("[data-preset]").forEach(button => {
       button.addEventListener("click", () => {
         const presets = {
-          paper: { theme: "light", overlay: true, particleColor: "#C2C2C2", backgroundColor: "#FFFFFF", fade: 0.24, turbulence: 0.42, axis: "horizontal", shape: "ridge", coverage: 0.72, formationScale: 1.18, ambientParticles: 0.34, spread: 1.02, scatter: 0.42, coordination: 0.8, gathering: 0.46, dispersal: 0.48, reformation: 0.64, responsiveness: 0.35, calmness: 0.82, dataStructure: 0.32, patternSubtlety: 0.74, negativeSpace: 0.56, edgeSoftness: 0.8, depth: 0.55, grain: 0.48 },
-          night: { theme: "dark", overlay: true, particleColor: "#737373", backgroundColor: "#000000", fade: 0.18, turbulence: 0.5, axis: "diagonal", shape: "wave", coverage: 0.82, formationScale: 1.26, ambientParticles: 0.42, spread: 1.08, scatter: 0.56, coordination: 0.72, gathering: 0.38, dispersal: 0.62, reformation: 0.7, responsiveness: 0.52, calmness: 0.66, dataStructure: 0.48, patternSubtlety: 0.62, negativeSpace: 0.36, edgeSoftness: 0.72, depth: 0.78, grain: 0.38 },
-          warm: { theme: "light", overlay: true, particleColor: "#C2C2C2", backgroundColor: "#FFFFFF", fade: 0.26, turbulence: 0.36, axis: "horizontal", shape: "veil", coverage: 0.68, formationScale: 1.14, ambientParticles: 0.38, spread: 1, scatter: 0.36, coordination: 0.86, gathering: 0.5, dispersal: 0.38, reformation: 0.58, responsiveness: 0.25, calmness: 0.9, dataStructure: 0.22, patternSubtlety: 0.82, negativeSpace: 0.64, edgeSoftness: 0.86, depth: 0.45, grain: 0.52 }
+          paper: { theme: "light", overlay: true, particleColor: "#C2C2C2", backgroundColor: "#FFFFFF", fade: 0.24, centerAttenuation: 0, turbulence: 0.42, axis: "horizontal", shape: "ridge", coverage: 0.72, formationScale: 1.18, ambientParticles: 0.34, spread: 1.02, scatter: 0.42, coordination: 0.8, gathering: 0.46, dispersal: 0.48, reformation: 0.64, responsiveness: 0.35, calmness: 0.82, dataStructure: 0.32, patternSubtlety: 0.74, negativeSpace: 0.56, edgeSoftness: 0.8, depth: 0.55, grain: 0.48 },
+          night: { theme: "dark", overlay: true, particleColor: "#737373", backgroundColor: "#000000", fade: 0.18, centerAttenuation: 0, turbulence: 0.5, axis: "diagonal", shape: "wave", coverage: 0.82, formationScale: 1.26, ambientParticles: 0.42, spread: 1.08, scatter: 0.56, coordination: 0.72, gathering: 0.38, dispersal: 0.62, reformation: 0.7, responsiveness: 0.52, calmness: 0.66, dataStructure: 0.48, patternSubtlety: 0.62, negativeSpace: 0.36, edgeSoftness: 0.72, depth: 0.78, grain: 0.38 },
+          warm: { theme: "light", overlay: true, particleColor: "#C2C2C2", backgroundColor: "#FFFFFF", fade: 0.26, centerAttenuation: 0, turbulence: 0.36, axis: "horizontal", shape: "veil", coverage: 0.68, formationScale: 1.14, ambientParticles: 0.38, spread: 1, scatter: 0.36, coordination: 0.86, gathering: 0.5, dispersal: 0.38, reformation: 0.58, responsiveness: 0.25, calmness: 0.9, dataStructure: 0.22, patternSubtlety: 0.82, negativeSpace: 0.64, edgeSoftness: 0.86, depth: 0.45, grain: 0.52 }
         };
         Object.assign(settings, presets[button.dataset.preset]);
         syncControlsFromSettings();
