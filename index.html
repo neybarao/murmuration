@@ -14,6 +14,7 @@
       --paper: #FFFFFF;
       --stage: #FFFFFF;
       --accent: oklch(45% 0.12 212);
+      --state-transition-duration: 200ms;
       font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
     }
 
@@ -118,7 +119,7 @@
       opacity: 0;
       pointer-events: none;
       filter: drop-shadow(0 18px 44px color-mix(in oklch, var(--ink), transparent 88%));
-      transition: opacity 180ms ease-out;
+      transition: opacity var(--state-transition-duration) ease-out;
     }
 
     .interface-overlay.is-visible {
@@ -131,7 +132,7 @@
       z-index: 2;
       pointer-events: none;
       opacity: 0;
-      transition: opacity 650ms ease;
+      transition: opacity var(--state-transition-duration) ease-out;
     }
 
     .ai-response-main {
@@ -321,6 +322,28 @@
       color: var(--ink);
     }
 
+    .transition-control {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      margin-top: 12px;
+      color: var(--ink);
+      font-size: 13px;
+    }
+
+    .transition-control input {
+      width: 92px;
+      min-height: 34px;
+      padding: 0 8px;
+      border: 1px solid var(--line);
+      border-radius: 7px;
+      background: oklch(99% 0.004 245);
+      color: var(--ink);
+      font: inherit;
+      text-align: right;
+    }
+
     @media (max-width: 900px) {
       body { overflow: auto; }
       .app { grid-template-columns: 1fr; }
@@ -353,8 +376,9 @@
       </div>
       <div class="hud"><span class="dot"></span><span id="readout">16000 particles</span></div>
       <div class="stage-actions">
-        <button id="responseToggle" type="button" aria-pressed="false">AI response</button>
+        <button id="responseToggle" type="button" aria-pressed="false">Chat</button>
         <button id="themeToggle" type="button" aria-pressed="false">Dark</button>
+        <button id="overlayToggle" class="is-active" type="button" aria-pressed="true">Overlay</button>
         <button id="panelToggle" type="button" aria-controls="settingsPanel" aria-expanded="true">Hide panel</button>
       </div>
     </section>
@@ -368,8 +392,11 @@
           <button data-preset="paper">Paper</button>
           <button data-preset="night">Night</button>
           <button data-preset="warm">Warm</button>
-          <button id="overlayToggle" class="is-active" type="button" aria-pressed="true">Overlay</button>
         </div>
+        <label class="transition-control" for="transitionDuration">
+          Transition duration
+          <input id="transitionDuration" type="number" min="0" max="5000" step="50" value="200" inputmode="numeric" aria-label="Transition duration in milliseconds">
+        </label>
       </div>
 
       <div class="group" id="controls"></div>
@@ -391,6 +418,7 @@
             <option value="vortex">Vortex</option>
             <option value="veil">Veil</option>
             <option value="spiral">Spiral</option>
+            <option value="circle">Circle</option>
             <option value="flock">Flock</option>
             <option value="swoop">Swoop</option>
             <option value="split-flock">Split flock</option>
@@ -431,6 +459,7 @@
     const themeToggle = document.getElementById("themeToggle");
     const copyPreviewBtn = document.getElementById("copyPreviewBtn");
     const responseToggle = document.getElementById("responseToggle");
+    const transitionDurationInput = document.getElementById("transitionDuration");
 
     const settings = {
       theme: "light",
@@ -527,6 +556,8 @@
     let animationId = 0;
     let transitionFrame = 0;
     let previewState = "information";
+    let overlayVisible = true;
+    let transitionDuration = 200;
     const stateConfigs = {
       information: null,
       response: null
@@ -569,11 +600,11 @@
     function centerAttenuationAt(x) {
       const horizontalPosition = x / w;
       const centerBand = smoothstep(0.15, 0.25, horizontalPosition) * (1 - smoothstep(0.75, 0.85, horizontalPosition));
-      return 1 - centerBand * settings.centerAttenuation * 0.78;
+      return 1 - centerBand * settings.centerAttenuation * 0.95;
     }
 
     function stateSnapshot(source = settings) {
-      const { theme, ...state } = source;
+      const { theme, overlay, ...state } = source;
       return state;
     }
 
@@ -582,6 +613,8 @@
         version: 2,
         activeState: previewState,
         theme: settings.theme,
+        overlay: overlayVisible,
+        transitionDuration,
         states: stateConfigs
       };
     }
@@ -614,8 +647,17 @@
       history.replaceState(null, "", url);
     }
 
+    function applyThemePalette(target = settings) {
+      const isDark = settings.theme === "dark";
+      target.backgroundColor = isDark ? "#000000" : "#FFFFFF";
+      target.particleColor = isDark ? "#737373" : "#C2C2C2";
+      target.fade = isDark ? Math.min(target.fade, 0.2) : Math.max(target.fade, 0.22);
+    }
+
     function applyStateConfig(nextState) {
-      Object.assign(settings, nextState, { theme: settings.theme });
+      const { overlay, ...state } = nextState;
+      Object.assign(settings, state, { theme: settings.theme });
+      applyThemePalette();
     }
 
     function applySharedConfig() {
@@ -625,6 +667,13 @@
         const shared = decodeSettings(encoded);
         if (shared.version === 2 && shared.states?.information && shared.states?.response) {
           settings.theme = shared.theme === "dark" ? "dark" : "light";
+          overlayVisible = typeof shared.overlay === "boolean"
+            ? shared.overlay
+            : Boolean(shared.states[shared.activeState === "response" ? "response" : "information"].overlay ?? settings.overlay);
+          settings.overlay = overlayVisible;
+          if (Number.isFinite(shared.transitionDuration)) {
+            transitionDuration = clamp(shared.transitionDuration, 0, 5000);
+          }
           stateConfigs.information = { ...stateSnapshot(), ...shared.states.information };
           stateConfigs.response = { ...stateSnapshot(), ...aiResponseDefaults, ...shared.states.response };
           previewState = shared.activeState === "response" ? "response" : "information";
@@ -632,10 +681,14 @@
           return true;
         }
 
-        // Support preview links created before state-specific sharing existed.
-        Object.keys(settings).forEach(key => {
-          if (Object.prototype.hasOwnProperty.call(shared, key)) settings[key] = shared[key];
-        });
+      // Support preview links created before state-specific sharing existed.
+      Object.keys(settings).forEach(key => {
+        if (Object.prototype.hasOwnProperty.call(shared, key)) settings[key] = shared[key];
+      });
+      if (typeof shared.overlay === "boolean") overlayVisible = shared.overlay;
+      if (Number.isFinite(shared.transitionDuration)) {
+        transitionDuration = clamp(shared.transitionDuration, 0, 5000);
+      }
       } catch (error) {
         console.warn("Could not load shared murmuration config.", error);
       }
@@ -644,16 +697,18 @@
 
     function syncControlsFromSettings() {
       app.dataset.theme = settings.theme;
+      app.style.setProperty("--state-transition-duration", `${transitionDuration}ms`);
       interfaceOverlay.src = settings.theme === "dark" ? "assets/nsiq-overlay-dark.svg" : "assets/nsiq-overlay-light.svg";
-      interfaceOverlay.classList.toggle("is-visible", settings.overlay);
-      aiResponseLayer.classList.toggle("is-visible", settings.overlay);
-      aiResponseLayer.setAttribute("aria-hidden", String(!settings.overlay));
-      overlayToggle.classList.toggle("is-active", settings.overlay);
-      overlayToggle.setAttribute("aria-pressed", String(settings.overlay));
+      interfaceOverlay.classList.toggle("is-visible", overlayVisible);
+      aiResponseLayer.classList.toggle("is-visible", overlayVisible);
+      aiResponseLayer.setAttribute("aria-hidden", String(!overlayVisible));
+      overlayToggle.classList.toggle("is-active", overlayVisible);
+      overlayToggle.setAttribute("aria-pressed", String(overlayVisible));
       themeToggle.textContent = settings.theme === "dark" ? "Light" : "Dark";
       themeToggle.setAttribute("aria-pressed", String(settings.theme === "dark"));
-      responseToggle.textContent = previewState === "response" ? "Show Information" : "AI Response";
+      responseToggle.textContent = previewState === "response" ? "Home" : "Chat";
       responseToggle.setAttribute("aria-pressed", String(previewState === "response"));
+      transitionDurationInput.value = transitionDuration;
       document.getElementById("particleColor").value = settings.particleColor;
       document.getElementById("backgroundColor").value = settings.backgroundColor;
       document.getElementById("axis").value = settings.axis;
@@ -747,6 +802,11 @@
         const radius = (0.08 + abs * 0.54) * Math.min(w, h) * settings.spread * settings.formationScale;
         x = w * 0.5 + Math.cos(turn) * radius;
         y = h * 0.55 + Math.sin(turn) * radius * (0.35 + settings.arch * 0.55);
+      } else if (settings.shape === "circle") {
+        const turn = rand(p.seed + 307) * Math.PI * 2 + phase * 0.00035;
+        const radius = Math.sqrt(rand(p.seed + 719)) * Math.min(w, h) * 0.38 * settings.spread * settings.formationScale;
+        x = w * 0.5 + Math.cos(turn) * radius + n * band * 0.25;
+        y = h * 0.55 + Math.sin(turn) * radius + n * band * 0.25;
       } else if (settings.shape === "flock") {
         const head = Math.exp(-Math.pow(structuredU + 0.42, 2) * 28) * h * 0.3 * settings.crest;
         const shoulder = Math.exp(-Math.pow(structuredU - 0.12, 2) * 10) * h * 0.1;
@@ -815,12 +875,17 @@
       return 1 - Math.pow(1 - value, 5);
     }
 
-    function transitionTo(nextState, duration = 5000) {
+    function transitionTo(nextState, duration = transitionDuration) {
       cancelAnimationFrame(transitionFrame);
       const start = performance.now();
       const previous = { ...settings };
-      const nextSettings = { ...nextState, theme: settings.theme };
-      const immediateKeys = ["particles", "ambientParticles", "shape", "axis", "overlay", "particleColor", "backgroundColor"];
+      const nextSettings = {
+        ...nextState,
+        theme: settings.theme,
+        particleColor: settings.particleColor,
+        backgroundColor: settings.backgroundColor
+      };
+      const immediateKeys = ["particles", "ambientParticles", "shape", "axis", "particleColor", "backgroundColor"];
       const numericKeys = Object.keys(nextSettings).filter(key =>
         typeof previous[key] === "number" &&
         typeof nextSettings[key] === "number" &&
@@ -857,7 +922,7 @@
       saveActiveState();
       previewState = nextState;
       app.classList.toggle("is-ai-response", previewState === "response");
-      transitionTo(stateConfigs[previewState]);
+      transitionTo(stateConfigs[previewState], transitionDuration);
       syncControlsFromSettings();
     }
 
@@ -942,7 +1007,7 @@
   const centerAttenuationAt = x => {
     const horizontalPosition = x / w;
     const centerBand = smoothstep(.15, .25, horizontalPosition) * (1 - smoothstep(.75, .85, horizontalPosition));
-    return 1 - centerBand * settings.centerAttenuation * .78;
+    return 1 - centerBand * settings.centerAttenuation * .95;
   };
   const makeParticle = i => {
     const r = Math.sqrt(Math.random()), a = Math.random() * Math.PI * 2;
@@ -986,6 +1051,11 @@
       const radius = (.08 + abs * .54) * Math.min(w, h) * settings.spread * settings.formationScale;
       x = w * .5 + Math.cos(turn) * radius;
       y = h * .55 + Math.sin(turn) * radius * (.35 + settings.arch * .55);
+    } else if (settings.shape === "circle") {
+      const turn = rand(p.seed + 307) * Math.PI * 2 + t * .00035;
+      const radius = Math.sqrt(rand(p.seed + 719)) * Math.min(w, h) * .38 * settings.spread * settings.formationScale;
+      x = w * .5 + Math.cos(turn) * radius + n * band * .25;
+      y = h * .55 + Math.sin(turn) * radius + n * band * .25;
     } else if (settings.shape === "flock") {
       const head = Math.exp(-Math.pow(structuredU + .42, 2) * 28) * h * .3 * settings.crest;
       const shoulder = Math.exp(-Math.pow(structuredU - .12, 2) * 10) * h * .1;
@@ -1113,12 +1183,18 @@
       });
     });
 
+    transitionDurationInput.addEventListener("change", () => {
+      transitionDuration = clamp(Number(transitionDurationInput.value) || 0, 0, 5000);
+      transitionDurationInput.value = transitionDuration;
+      updatePreviewUrl();
+    });
+
     document.querySelectorAll("[data-preset]").forEach(button => {
       button.addEventListener("click", () => {
         const presets = {
-          paper: { theme: "light", overlay: true, particleColor: "#C2C2C2", backgroundColor: "#FFFFFF", fade: 0.24, centerAttenuation: 0, turbulence: 0.42, axis: "horizontal", shape: "ridge", coverage: 0.72, formationScale: 1.18, ambientParticles: 0.34, spread: 1.02, scatter: 0.42, coordination: 0.8, gathering: 0.46, dispersal: 0.48, reformation: 0.64, responsiveness: 0.35, calmness: 0.82, dataStructure: 0.32, patternSubtlety: 0.74, negativeSpace: 0.56, edgeSoftness: 0.8, depth: 0.55, grain: 0.48 },
-          night: { theme: "dark", overlay: true, particleColor: "#737373", backgroundColor: "#000000", fade: 0.18, centerAttenuation: 0, turbulence: 0.5, axis: "diagonal", shape: "wave", coverage: 0.82, formationScale: 1.26, ambientParticles: 0.42, spread: 1.08, scatter: 0.56, coordination: 0.72, gathering: 0.38, dispersal: 0.62, reformation: 0.7, responsiveness: 0.52, calmness: 0.66, dataStructure: 0.48, patternSubtlety: 0.62, negativeSpace: 0.36, edgeSoftness: 0.72, depth: 0.78, grain: 0.38 },
-          warm: { theme: "light", overlay: true, particleColor: "#C2C2C2", backgroundColor: "#FFFFFF", fade: 0.26, centerAttenuation: 0, turbulence: 0.36, axis: "horizontal", shape: "veil", coverage: 0.68, formationScale: 1.14, ambientParticles: 0.38, spread: 1, scatter: 0.36, coordination: 0.86, gathering: 0.5, dispersal: 0.38, reformation: 0.58, responsiveness: 0.25, calmness: 0.9, dataStructure: 0.22, patternSubtlety: 0.82, negativeSpace: 0.64, edgeSoftness: 0.86, depth: 0.45, grain: 0.52 }
+          paper: { theme: "light", particleColor: "#C2C2C2", backgroundColor: "#FFFFFF", fade: 0.24, centerAttenuation: 0, turbulence: 0.42, axis: "horizontal", shape: "ridge", coverage: 0.72, formationScale: 1.18, ambientParticles: 0.34, spread: 1.02, scatter: 0.42, coordination: 0.8, gathering: 0.46, dispersal: 0.48, reformation: 0.64, responsiveness: 0.35, calmness: 0.82, dataStructure: 0.32, patternSubtlety: 0.74, negativeSpace: 0.56, edgeSoftness: 0.8, depth: 0.55, grain: 0.48 },
+          night: { theme: "dark", particleColor: "#737373", backgroundColor: "#000000", fade: 0.18, centerAttenuation: 0, turbulence: 0.5, axis: "diagonal", shape: "wave", coverage: 0.82, formationScale: 1.26, ambientParticles: 0.42, spread: 1.08, scatter: 0.56, coordination: 0.72, gathering: 0.38, dispersal: 0.62, reformation: 0.7, responsiveness: 0.52, calmness: 0.66, dataStructure: 0.48, patternSubtlety: 0.62, negativeSpace: 0.36, edgeSoftness: 0.72, depth: 0.78, grain: 0.38 },
+          warm: { theme: "light", particleColor: "#C2C2C2", backgroundColor: "#FFFFFF", fade: 0.26, centerAttenuation: 0, turbulence: 0.36, axis: "horizontal", shape: "veil", coverage: 0.68, formationScale: 1.14, ambientParticles: 0.38, spread: 1, scatter: 0.36, coordination: 0.86, gathering: 0.5, dispersal: 0.38, reformation: 0.58, responsiveness: 0.25, calmness: 0.9, dataStructure: 0.22, patternSubtlety: 0.82, negativeSpace: 0.64, edgeSoftness: 0.86, depth: 0.45, grain: 0.52 }
         };
         Object.assign(settings, presets[button.dataset.preset]);
         syncControlsFromSettings();
@@ -1151,23 +1227,17 @@
     });
 
     overlayToggle.addEventListener("click", () => {
-      settings.overlay = !settings.overlay;
+      overlayVisible = !overlayVisible;
+      settings.overlay = overlayVisible;
       syncControlsFromSettings();
-      saveActiveState();
+      refreshExport();
       updatePreviewUrl();
     });
 
     themeToggle.addEventListener("click", () => {
       settings.theme = settings.theme === "dark" ? "light" : "dark";
-      if (settings.theme === "dark") {
-        settings.backgroundColor = "#000000";
-        settings.particleColor = "#737373";
-        settings.fade = Math.min(settings.fade, 0.2);
-      } else {
-        settings.backgroundColor = "#FFFFFF";
-        settings.particleColor = "#C2C2C2";
-        settings.fade = Math.max(settings.fade, 0.22);
-      }
+      applyThemePalette();
+      Object.values(stateConfigs).filter(Boolean).forEach(applyThemePalette);
       syncControlsFromSettings();
       saveActiveState();
       refreshExport();
