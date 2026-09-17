@@ -981,17 +981,40 @@
     }
 
     function refreshExport() {
-      const options = JSON.stringify(settings, null, 2);
+      const states = JSON.stringify({
+        home: stateSnapshot(stateConfigs.information || settings),
+        chat: stateSnapshot(stateConfigs.response || settings)
+      }, null, 2);
       exportCode.value = `<div id="murmuration-bg"></div>
 <script type="module">
   import { createMurmurationBackground } from "./murmuration-background.js";
-  createMurmurationBackground(document.querySelector("#murmuration-bg"), ${options});
+  const states = ${states};
+
+  const murmuration = createMurmurationBackground(
+    document.querySelector("#murmuration-bg"),
+    { states, initialState: "home", transitionDuration: ${transitionDuration} }
+  );
+
+  // When the application changes state:
+  // murmuration.transitionTo("chat");
+
+  // Register additional collections when needed:
+  // murmuration.setState("results", { ...states.chat, shape: "spiral" });
 <\/script>`;
     }
 
     function exportedModule() {
-      return `export function createMurmurationBackground(el, options = {}) {
-  const settings = ${JSON.stringify(settings, null, 2)};
+      const defaultSettings = JSON.stringify(stateSnapshot(settings), null, 2);
+      return `export function createMurmurationBackground(el, {
+  states = {},
+  initialState,
+  transitionDuration = 200,
+  ...options
+} = {}) {
+  const defaultSettings = ${defaultSettings};
+  const collections = Object.keys(states).length ? states : { default: { ...defaultSettings } };
+  let activeState = initialState && collections[initialState] ? initialState : Object.keys(collections)[0];
+  const settings = { ...defaultSettings, ...collections[activeState], ...options };
   Object.assign(settings, options);
   const canvas = document.createElement("canvas");
   const ctx = canvas.getContext("2d", { alpha: false });
@@ -999,7 +1022,7 @@
   Object.assign(canvas.style, { width: "100%", height: "100%", display: "block" });
   el.appendChild(canvas);
   const particles = [];
-  let w = 1, h = 1, dpr = 1, t = 0, animationId = 0;
+  let w = 1, h = 1, dpr = 1, t = 0, animationId = 0, transitionFrame = 0;
   const rand = seed => {
     const x = Math.sin(seed * 127.1) * 43758.5453123;
     return x - Math.floor(x);
@@ -1097,19 +1120,71 @@
     const rdx = x - cx, rdy = y - cy;
     return { x: cx + rdx * Math.cos(angle) - rdy * Math.sin(angle), y: cy + rdx * Math.sin(angle) + rdy * Math.cos(angle) };
   };
-  function resize() {
-    const box = el.getBoundingClientRect();
-    dpr = Math.min(window.devicePixelRatio || 1, 2);
-    w = Math.max(1, Math.floor(box.width)); h = Math.max(1, Math.floor(box.height));
-    canvas.width = Math.floor(w * dpr); canvas.height = Math.floor(h * dpr);
-    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  const syncParticleCount = () => {
     while (particles.length < settings.particles) particles.push(makeParticle(particles.length + 1));
     particles.length = settings.particles;
     particles.forEach((particle, index) => {
       particle.index = particle.index || index + 1;
       particle.field = rand(particle.index + 77) < settings.ambientParticles;
     });
+  };
+  const nudgeTowardsFormation = (multiplier = .02) => {
+    particles.forEach(particle => {
+      if (particle.field) return;
+      const target = targetFor(particle);
+      particle.vx += (target.x - particle.x) * multiplier;
+      particle.vy += (target.y - particle.y) * multiplier;
+    });
+  };
+  const easeInOutCubic = value => value < .5
+    ? 4 * value * value * value
+    : 1 - Math.pow(-2 * value + 2, 3) / 2;
+  function resize() {
+    const box = el.getBoundingClientRect();
+    dpr = Math.min(window.devicePixelRatio || 1, 2);
+    w = Math.max(1, Math.floor(box.width)); h = Math.max(1, Math.floor(box.height));
+    canvas.width = Math.floor(w * dpr); canvas.height = Math.floor(h * dpr);
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    syncParticleCount();
     ctx.globalAlpha = 1; ctx.fillStyle = settings.backgroundColor; ctx.fillRect(0, 0, w, h);
+  }
+  function transitionTo(name, duration = transitionDuration) {
+    if (!Object.prototype.hasOwnProperty.call(collections, name)) {
+      throw new Error(\`Unknown murmuration state: \${name}\`);
+    }
+    cancelAnimationFrame(transitionFrame);
+    const previous = { ...settings };
+    const nextSettings = { ...defaultSettings, ...collections[name] };
+    const immediateKeys = ["particles", "ambientParticles", "shape", "axis", "particleColor", "backgroundColor"];
+    const numericKeys = Object.keys(nextSettings).filter(key =>
+      typeof previous[key] === "number" &&
+      typeof nextSettings[key] === "number" &&
+      !immediateKeys.includes(key)
+    );
+    immediateKeys.forEach(key => { settings[key] = nextSettings[key]; });
+    syncParticleCount();
+    if (previous.shape !== settings.shape) nudgeTowardsFormation();
+    activeState = name;
+    if (duration <= 0) {
+      Object.assign(settings, nextSettings);
+      syncParticleCount();
+      return;
+    }
+    const start = performance.now();
+    const tick = now => {
+      const progress = Math.min(1, (now - start) / duration);
+      const eased = easeInOutCubic(progress);
+      numericKeys.forEach(key => {
+        settings[key] = previous[key] + (nextSettings[key] - previous[key]) * eased;
+      });
+      if (progress < 1) {
+        transitionFrame = requestAnimationFrame(tick);
+      } else {
+        Object.assign(settings, nextSettings);
+        syncParticleCount();
+      }
+    };
+    transitionFrame = requestAnimationFrame(tick);
   }
   function frame() {
     t += 16 * settings.speed;
@@ -1141,8 +1216,11 @@
   frame();
   return {
     canvas,
-    update(nextOptions = {}) { Object.assign(settings, nextOptions); resize(); },
-    destroy() { cancelAnimationFrame(animationId); removeEventListener("resize", onResize); canvas.remove(); }
+    get activeState() { return activeState; },
+    setState(name, state) { collections[name] = { ...defaultSettings, ...state }; },
+    transitionTo,
+    update(nextOptions = {}) { Object.assign(settings, nextOptions); syncParticleCount(); },
+    destroy() { cancelAnimationFrame(animationId); cancelAnimationFrame(transitionFrame); removeEventListener("resize", onResize); canvas.remove(); }
   };
 }`;
     }
