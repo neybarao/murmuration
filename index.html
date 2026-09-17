@@ -391,6 +391,9 @@
             <option value="vortex">Vortex</option>
             <option value="veil">Veil</option>
             <option value="spiral">Spiral</option>
+            <option value="flock">Flock</option>
+            <option value="swoop">Swoop</option>
+            <option value="split-flock">Split flock</option>
           </select>
         </label>
       </div>
@@ -744,6 +747,22 @@
         const radius = (0.08 + abs * 0.54) * Math.min(w, h) * settings.spread * settings.formationScale;
         x = w * 0.5 + Math.cos(turn) * radius;
         y = h * 0.55 + Math.sin(turn) * radius * (0.35 + settings.arch * 0.55);
+      } else if (settings.shape === "flock") {
+        const head = Math.exp(-Math.pow(structuredU + 0.42, 2) * 28) * h * 0.3 * settings.crest;
+        const shoulder = Math.exp(-Math.pow(structuredU - 0.12, 2) * 10) * h * 0.1;
+        const trailingWing = Math.pow((structuredU + 1) * 0.5, 2.15) * h * 0.24 * settings.arch;
+        x += Math.sin((structuredU + 0.2) * Math.PI) * w * 0.045 * settings.spread;
+        y = h * 0.66 - head - shoulder + trailingWing + Math.sin(structuredU * Math.PI * 1.6 + phase * 0.0017) * h * 0.035 + n * band * 0.72;
+      } else if (settings.shape === "swoop") {
+        const travel = (structuredU + 1) * 0.5;
+        const lift = Math.exp(-Math.pow(travel - 0.22, 2) * 25) * h * 0.12 * settings.crest;
+        x = w * (0.17 + travel * 0.66) * settings.spread * settings.formationScale;
+        y = h * (0.24 + Math.pow(travel, 1.7) * 0.56) - lift + n * band * 0.55;
+      } else if (settings.shape === "split-flock") {
+        const branch = rand(p.seed + 611) > 0.5 ? -1 : 1;
+        const localU = structuredU * 0.78;
+        x = w * 0.5 + branch * w * 0.19 * settings.spread + localU * w * 0.28 * settings.spread * settings.formationScale;
+        y = h * (0.55 + branch * 0.045) + Math.sin(localU * Math.PI * 1.3 + phase * 0.0018) * h * 0.12 * settings.crest + n * band * 0.55;
       }
 
       const expansion = 1 + dispersalPulse * 0.34 - settings.gathering * 0.18;
@@ -777,6 +796,15 @@
       };
     }
 
+    function nudgeTowardsFormation(multiplier = 0.02) {
+      particles.forEach(particle => {
+        if (particle.field) return;
+        const target = targetFor(particle, t);
+        particle.vx += (target.x - particle.x) * multiplier;
+        particle.vy += (target.y - particle.y) * multiplier;
+      });
+    }
+
     function clearFrame() {
       ctx.globalAlpha = 1;
       ctx.fillStyle = settings.backgroundColor;
@@ -801,6 +829,7 @@
 
       immediateKeys.forEach(key => { settings[key] = nextSettings[key]; });
       syncParticleCount();
+      if (previous.shape !== settings.shape) nudgeTowardsFormation();
       syncControlsFromSettings();
 
       function tick(now) {
@@ -957,6 +986,22 @@
       const radius = (.08 + abs * .54) * Math.min(w, h) * settings.spread * settings.formationScale;
       x = w * .5 + Math.cos(turn) * radius;
       y = h * .55 + Math.sin(turn) * radius * (.35 + settings.arch * .55);
+    } else if (settings.shape === "flock") {
+      const head = Math.exp(-Math.pow(structuredU + .42, 2) * 28) * h * .3 * settings.crest;
+      const shoulder = Math.exp(-Math.pow(structuredU - .12, 2) * 10) * h * .1;
+      const trailingWing = Math.pow((structuredU + 1) * .5, 2.15) * h * .24 * settings.arch;
+      x += Math.sin((structuredU + .2) * Math.PI) * w * .045 * settings.spread;
+      y = h * .66 - head - shoulder + trailingWing + Math.sin(structuredU * Math.PI * 1.6 + t * .0017) * h * .035 + n * band * .72;
+    } else if (settings.shape === "swoop") {
+      const travel = (structuredU + 1) * .5;
+      const lift = Math.exp(-Math.pow(travel - .22, 2) * 25) * h * .12 * settings.crest;
+      x = w * (.17 + travel * .66) * settings.spread * settings.formationScale;
+      y = h * (.24 + Math.pow(travel, 1.7) * .56) - lift + n * band * .55;
+    } else if (settings.shape === "split-flock") {
+      const branch = rand(p.seed + 611) > .5 ? -1 : 1;
+      const localU = structuredU * .78;
+      x = w * .5 + branch * w * .19 * settings.spread + localU * w * .28 * settings.spread * settings.formationScale;
+      y = h * (.55 + branch * .045) + Math.sin(localU * Math.PI * 1.3 + t * .0018) * h * .12 * settings.crest + n * band * .55;
     }
     const expansion = 1 + dispersalPulse * .34 - settings.gathering * .18;
     const coverageLift = 1 + settings.coverage * .38;
@@ -1060,6 +1105,7 @@
     ["axis", "shape"].forEach(key => {
       document.getElementById(key).addEventListener("change", event => {
         settings[key] = event.target.value;
+        if (key === "shape") nudgeTowardsFormation();
         saveActiveState();
         refreshExport();
         clearFrame();
