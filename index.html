@@ -657,10 +657,10 @@
       target.fade = isDark ? Math.min(target.fade, 0.2) : Math.max(target.fade, 0.22);
     }
 
-    function applyStateConfig(nextState) {
+    function applyStateConfig(nextState, applyTheme = false) {
       const { overlay, ...state } = nextState;
       Object.assign(settings, state, { theme: settings.theme });
-      applyThemePalette();
+      if (applyTheme) applyThemePalette();
     }
 
     function applySharedConfig() {
