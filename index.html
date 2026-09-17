@@ -1005,10 +1005,17 @@
 
     function exportedModule() {
       const defaultSettings = JSON.stringify(stateSnapshot(settings), null, 2);
-      return `export function createMurmurationBackground(el, {
-  states = {},
+      const exportedStates = JSON.stringify({
+        home: stateSnapshot(stateConfigs.information || settings),
+        chat: stateSnapshot(stateConfigs.response || settings)
+      }, null, 2);
+      return `export const murmurationStates = ${exportedStates};
+export const defaultTransitionDuration = ${transitionDuration};
+
+export function createMurmurationBackground(el, {
+  states = murmurationStates,
   initialState,
-  transitionDuration = 200,
+  transitionDuration = defaultTransitionDuration,
   ...options
 } = {}) {
   const defaultSettings = ${defaultSettings};
