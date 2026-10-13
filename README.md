@@ -234,10 +234,11 @@ const murmuration = reducedMotion
 - The runtime caps internal canvas resolution and pauses when the document is hidden or the user prefers reduced motion.
 - `particles` remains the visual-density setting in the exported configuration, but runtime quality limits it to `10000` active particles on desktop-class devices and `6000` on narrow or constrained devices. The configuration object is not changed.
 - The internal canvas uses a maximum device-pixel ratio of `1` on desktop-class devices and `0.75` on constrained devices. The CSS size remains unchanged.
+- Particle positions, velocity, seeds, and ambient flags use typed arrays internally to reduce garbage collection and per-frame memory overhead.
 - Start from the tuned `16000` particles as a visual upper bound and test the resulting active count on target hardware.
 - Use one animation instance per visible page or route.
 - Call `destroy()` when a screen unmounts.
-- Avoid changing `particles` frequently at runtime because it reallocates the particle collection.
+- Avoid changing `particles` frequently at runtime because growing the active count can reallocate the internal particle buffers.
 
 ## Local Preview and Deploy
 

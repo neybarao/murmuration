@@ -551,8 +551,14 @@
     ];
     const controls = controlGroups.flatMap(group => group.controls);
 
-    const particles = [];
     const target = { x: 0, y: 0 };
+    let particleCount = 0;
+    let particleX = new Float32Array(0);
+    let particleY = new Float32Array(0);
+    let velocityX = new Float32Array(0);
+    let velocityY = new Float32Array(0);
+    let particleSeed = new Float32Array(0);
+    let particleField = new Uint8Array(0);
     let w = 1;
     let h = 1;
     let dpr = 1;
@@ -767,30 +773,44 @@
 
     function syncParticleCount() {
       const count = effectiveParticleCount();
-      while (particles.length < count) particles.push(makeParticle(particles.length + 1));
-      particles.length = count;
-      particles.forEach((particle, index) => {
-        particle.index = particle.index || index + 1;
-        particle.field = rand(particle.index + 77) < settings.ambientParticles;
-      });
+      ensureParticleCapacity(count);
+      while (particleCount < count) resetParticle(particleCount, particleCount + 1);
+      particleCount = count;
+      for (let i = 0; i < particleCount; i++) {
+        particleField[i] = rand(i + 78) < settings.ambientParticles ? 1 : 0;
+      }
       readout.textContent = count === settings.particles
         ? `${count.toLocaleString("en-US")} particles`
         : `${count.toLocaleString("en-US")} active / ${settings.particles.toLocaleString("en-US")}`;
     }
 
-    function makeParticle(i) {
+    function ensureParticleCapacity(count) {
+      if (particleX.length >= count) return;
+      const capacity = Math.max(count, Math.ceil(Math.max(1, particleX.length) * 1.5));
+      const nextX = new Float32Array(capacity);
+      const nextY = new Float32Array(capacity);
+      const nextVelocityX = new Float32Array(capacity);
+      const nextVelocityY = new Float32Array(capacity);
+      const nextSeed = new Float32Array(capacity);
+      const nextField = new Uint8Array(capacity);
+      nextX.set(particleX); nextY.set(particleY);
+      nextVelocityX.set(velocityX); nextVelocityY.set(velocityY);
+      nextSeed.set(particleSeed); nextField.set(particleField);
+      particleX = nextX; particleY = nextY;
+      velocityX = nextVelocityX; velocityY = nextVelocityY;
+      particleSeed = nextSeed; particleField = nextField;
+    }
+
+    function resetParticle(index, source = index + 1) {
       const r = Math.sqrt(Math.random());
       const a = Math.random() * Math.PI * 2;
-      const field = rand(i + 77) < settings.ambientParticles;
-      return {
-        x: field ? Math.random() * w : w * 0.5 + Math.cos(a) * r * w * 0.42,
-        y: field ? Math.random() * h : h * 0.58 + Math.sin(a) * r * h * 0.28,
-        vx: (Math.random() - 0.5) * 0.6,
-        vy: (Math.random() - 0.5) * 0.6,
-        seed: i * 13.37 + Math.random() * 900,
-        index: i,
-        field
-      };
+      const field = rand(index + 78) < settings.ambientParticles;
+      particleX[index] = field ? Math.random() * w : w * 0.5 + Math.cos(a) * r * w * 0.42;
+      particleY[index] = field ? Math.random() * h : h * 0.58 + Math.sin(a) * r * h * 0.28;
+      velocityX[index] = (Math.random() - 0.5) * 0.6;
+      velocityY[index] = (Math.random() - 0.5) * 0.6;
+      particleSeed[index] = source * 13.37 + Math.random() * 900;
+      particleField[index] = field ? 1 : 0;
     }
 
     function updateFrameConstants() {
@@ -801,18 +821,19 @@
       shapeSubtlety = 0.45 + settings.patternSubtlety * 0.75;
     }
 
-    function targetFor(p, phase, out = target) {
-      if (p.field) {
-        const ax = rand(p.seed + Math.floor(phase * 0.003));
-        const ay = rand(p.seed + 911 + Math.floor(phase * 0.002));
-        const driftX = Math.sin(phase * 0.0007 + p.seed) * w * 0.08 * settings.coverage;
-        const driftY = Math.cos(phase * 0.0006 + p.seed) * h * 0.08 * settings.coverage;
+    function targetFor(index, phase, out = target) {
+      const seed = particleSeed[index];
+      if (particleField[index]) {
+        const ax = rand(seed + Math.floor(phase * 0.003));
+        const ay = rand(seed + 911 + Math.floor(phase * 0.002));
+        const driftX = Math.sin(phase * 0.0007 + seed) * w * 0.08 * settings.coverage;
+        const driftY = Math.cos(phase * 0.0006 + seed) * h * 0.08 * settings.coverage;
         out.x = w * (0.08 + ax * 0.84) + driftX;
         out.y = h * (0.08 + ay * 0.84) + driftY;
         return out;
       }
-      const n = (rand(p.seed + Math.floor(phase * 0.018)) - 0.5) * (settings.turbulence + settings.scatter + dispersalPulse * 0.5);
-      const u = ((p.seed * 0.618033 + phase * 0.00035) % 1) * 2 - 1;
+      const n = (rand(seed + Math.floor(phase * 0.018)) - 0.5) * (settings.turbulence + settings.scatter + dispersalPulse * 0.5);
+      const u = ((seed * 0.618033 + phase * 0.00035) % 1) * 2 - 1;
       const abs = Math.abs(u);
       const structureStep = Math.round(u * 18) / 18;
       const structuredU = u * (1 - settings.dataStructure * 0.42) + structureStep * settings.dataStructure * 0.42;
@@ -828,7 +849,7 @@
       } else if (settings.shape === "arch") {
         y = h * 0.68 - Math.sin((1 - abs) * Math.PI) * h * 0.34 * settings.crest + n * band;
       } else if (settings.shape === "vortex") {
-        const turn = u * Math.PI * 2.4 + phase * 0.003 + p.seed * 0.01;
+        const turn = u * Math.PI * 2.4 + phase * 0.003 + seed * 0.01;
         const radius = (0.12 + abs * 0.42 + n * 0.04) * minDimension * settings.spread * settings.formationScale;
         x = w * 0.5 + Math.cos(turn) * radius;
         y = h * 0.54 + Math.sin(turn) * radius * (0.5 + settings.arch * 0.5);
@@ -840,8 +861,8 @@
         x = w * 0.5 + Math.cos(turn) * radius;
         y = h * 0.55 + Math.sin(turn) * radius * (0.35 + settings.arch * 0.55);
       } else if (settings.shape === "circle") {
-        const turn = rand(p.seed + 307) * Math.PI * 2 + phase * 0.00035;
-        const radius = Math.sqrt(rand(p.seed + 719)) * minDimension * 0.38 * settings.spread * settings.formationScale;
+        const turn = rand(seed + 307) * Math.PI * 2 + phase * 0.00035;
+        const radius = Math.sqrt(rand(seed + 719)) * minDimension * 0.38 * settings.spread * settings.formationScale;
         x = w * 0.5 + Math.cos(turn) * radius + n * band * 0.25;
         y = h * 0.55 + Math.sin(turn) * radius + n * band * 0.25;
       } else if (settings.shape === "flock") {
@@ -856,7 +877,7 @@
         x = w * (0.17 + travel * 0.66) * settings.spread * settings.formationScale;
         y = h * (0.24 + Math.pow(travel, 1.7) * 0.56) - lift + n * band * 0.55;
       } else if (settings.shape === "split-flock") {
-        const branch = rand(p.seed + 611) > 0.5 ? -1 : 1;
+        const branch = rand(seed + 611) > 0.5 ? -1 : 1;
         const localU = structuredU * 0.78;
         x = w * 0.5 + branch * w * 0.19 * settings.spread + localU * w * 0.28 * settings.spread * settings.formationScale;
         y = h * (0.55 + branch * 0.045) + Math.sin(localU * Math.PI * 1.3 + phase * 0.0018) * h * 0.12 * settings.crest + n * band * 0.55;
@@ -866,11 +887,11 @@
       const coverageLift = 1 + settings.coverage * 0.38;
       x = w * 0.5 + (x - w * 0.5) * expansion * coverageLift;
       y = h * 0.55 + (y - h * 0.55) * expansion * (1 + settings.coverage * 0.5);
-      x += (rand(p.seed + 101) - 0.5) * w * (0.08 + settings.coverage * 0.18) * settings.scatter * (1.3 - settings.calmness * 0.5);
-      y += (rand(p.seed + 202) - 0.5) * h * (0.08 + settings.coverage * 0.2) * settings.scatter * (1.3 - settings.calmness * 0.5);
+      x += (rand(seed + 101) - 0.5) * w * (0.08 + settings.coverage * 0.18) * settings.scatter * (1.3 - settings.calmness * 0.5);
+      y += (rand(seed + 202) - 0.5) * h * (0.08 + settings.coverage * 0.2) * settings.scatter * (1.3 - settings.calmness * 0.5);
 
       const hollow = Math.exp(-u * u * 18) * settings.arch * settings.negativeSpace;
-      if (rand(p.seed + 42) < hollow * 0.55) y += h * (0.13 + 0.16 * rand(p.seed + 9));
+      if (rand(seed + 42) < hollow * 0.55) y += h * (0.13 + 0.16 * rand(seed + 9));
 
       const dx = x - centerX;
       const dy = y - centerY;
@@ -891,12 +912,12 @@
 
     function nudgeTowardsFormation(multiplier = 0.02) {
       updateFrameConstants();
-      particles.forEach(particle => {
-        if (particle.field) return;
-        const target = targetFor(particle, t);
-        particle.vx += (target.x - particle.x) * multiplier;
-        particle.vy += (target.y - particle.y) * multiplier;
-      });
+      for (let i = 0; i < particleCount; i++) {
+        if (particleField[i]) continue;
+        const nextTarget = targetFor(i, t);
+        velocityX[i] += (nextTarget.x - particleX[i]) * multiplier;
+        velocityY[i] += (nextTarget.y - particleY[i]) * multiplier;
+      }
     }
 
     function clearFrame() {
@@ -999,29 +1020,33 @@
       const fieldOpacity = 0.34 + settings.coverage * 0.22;
       const grainScale = settings.grain * 0.34;
 
-      for (let i = 0; i < particles.length; i++) {
-        const p = particles[i];
-        const target = targetFor(p, t);
-        const flow = Math.sin((p.x * 0.006) + (p.y * 0.004) + t * 0.004 + p.seed);
-        p.vx += (target.x - p.x) * attraction + Math.cos(flow + p.seed) * flowForce;
-        p.vy += (target.y - p.y) * attraction + Math.sin(flow * 1.7) * flowForce * 0.78;
-        p.vx *= damping;
-        p.vy *= damping;
-        p.x += p.vx * movementScale;
-        p.y += p.vy * movementScale;
+      for (let i = 0; i < particleCount; i++) {
+        const seed = particleSeed[i];
+        const nextTarget = targetFor(i, t);
+        let x = particleX[i];
+        let y = particleY[i];
+        let vx = velocityX[i];
+        let vy = velocityY[i];
+        const flow = Math.sin((x * 0.006) + (y * 0.004) + t * 0.004 + seed);
+        vx += (nextTarget.x - x) * attraction + Math.cos(flow + seed) * flowForce;
+        vy += (nextTarget.y - y) * attraction + Math.sin(flow * 1.7) * flowForce * 0.78;
+        vx *= damping;
+        vy *= damping;
+        x += vx * movementScale;
+        y += vy * movementScale;
 
-        if (p.x < -20 || p.x > w + 20 || p.y < -20 || p.y > h + 20) {
-          const fresh = makeParticle(p.seed);
-          p.x = fresh.x;
-          p.y = fresh.y;
-          p.vx = fresh.vx;
-          p.vy = fresh.vy;
+        if (x < -20 || x > w + 20 || y < -20 || y > h + 20) {
+          resetParticle(i, seed);
+          x = particleX[i]; y = particleY[i];
+          vx = velocityX[i]; vy = velocityY[i];
         }
-        const flicker = rand(p.seed + Math.floor(t * 0.002));
-        const depth = 0.32 + depthScale * rand(p.seed + 33);
-        const opacity = (0.12 + depth + flicker * grainScale) * (p.field ? fieldOpacity : 1) * centerAttenuationAt(p.x);
+        particleX[i] = x; particleY[i] = y;
+        velocityX[i] = vx; velocityY[i] = vy;
+        const flicker = rand(particleSeed[i] + Math.floor(t * 0.002));
+        const depth = 0.32 + depthScale * rand(particleSeed[i] + 33);
+        const opacity = (0.12 + depth + flicker * grainScale) * (particleField[i] ? fieldOpacity : 1) * centerAttenuationAt(x);
         ctx.globalAlpha = clamp(opacity, 0.04, 0.92);
-        ctx.fillRect(p.x, p.y, settings.particleSize, settings.particleSize);
+        ctx.fillRect(x, y, settings.particleSize, settings.particleSize);
       }
       ctx.globalAlpha = 1;
       animationId = requestAnimationFrame(draw);
@@ -1084,8 +1109,12 @@ export function createMurmurationBackground(el, {
   Object.assign(el.style, { position: "absolute", inset: "0", overflow: "hidden", zIndex: "-1" });
   Object.assign(canvas.style, { width: "100%", height: "100%", display: "block" });
   el.appendChild(canvas);
-  const particles = [];
   const target = { x: 0, y: 0 };
+  let particleCount = 0;
+  let particleX = new Float32Array(0), particleY = new Float32Array(0);
+  let velocityX = new Float32Array(0), velocityY = new Float32Array(0);
+  let particleSeed = new Float32Array(0);
+  let particleField = new Uint8Array(0);
   let w = 1, h = 1, dpr = 1, t = 0, animationId = 0, transitionFrame = 0;
   let centerX = .5, centerY = .55, minDimension = 1, rotationCos = 1, rotationSin = 0, dispersalPulse = 0, shapeSubtlety = 1;
   const diagonalCos = Math.SQRT1_2;
@@ -1111,10 +1140,25 @@ export function createMurmurationBackground(el, {
   };
   const effectiveParticleCount = () => Math.min(settings.particles, isConstrainedDevice() ? 6000 : 10000);
   const renderScale = () => isConstrainedDevice() ? .75 : 1;
-  const makeParticle = i => {
+  const ensureParticleCapacity = count => {
+    if (particleX.length >= count) return;
+    const capacity = Math.max(count, Math.ceil(Math.max(1, particleX.length) * 1.5));
+    const nextX = new Float32Array(capacity), nextY = new Float32Array(capacity);
+    const nextVelocityX = new Float32Array(capacity), nextVelocityY = new Float32Array(capacity);
+    const nextSeed = new Float32Array(capacity), nextField = new Uint8Array(capacity);
+    nextX.set(particleX); nextY.set(particleY); nextVelocityX.set(velocityX); nextVelocityY.set(velocityY);
+    nextSeed.set(particleSeed); nextField.set(particleField);
+    particleX = nextX; particleY = nextY; velocityX = nextVelocityX; velocityY = nextVelocityY;
+    particleSeed = nextSeed; particleField = nextField;
+  };
+  const resetParticle = (index, source = index + 1) => {
     const r = Math.sqrt(Math.random()), a = Math.random() * Math.PI * 2;
-    const field = rand(i + 77) < settings.ambientParticles;
-    return { x: field ? Math.random() * w : w * .5 + Math.cos(a) * r * w * .42, y: field ? Math.random() * h : h * .58 + Math.sin(a) * r * h * .28, vx: (Math.random() - .5) * .6, vy: (Math.random() - .5) * .6, seed: i * 13.37 + Math.random() * 900, index: i, field };
+    const field = rand(index + 78) < settings.ambientParticles;
+    particleX[index] = field ? Math.random() * w : w * .5 + Math.cos(a) * r * w * .42;
+    particleY[index] = field ? Math.random() * h : h * .58 + Math.sin(a) * r * h * .28;
+    velocityX[index] = (Math.random() - .5) * .6; velocityY[index] = (Math.random() - .5) * .6;
+    particleSeed[index] = source * 13.37 + Math.random() * 900;
+    particleField[index] = field ? 1 : 0;
   };
   const updateFrameConstants = () => {
     const angle = settings.rotation * Math.PI / 180;
@@ -1123,18 +1167,19 @@ export function createMurmurationBackground(el, {
     dispersalPulse = settings.dispersal * (.5 + .5 * Math.sin(t * .0014));
     shapeSubtlety = .45 + settings.patternSubtlety * .75;
   };
-  const targetFor = (p, out = target) => {
-    if (p.field) {
-      const ax = rand(p.seed + Math.floor(t * .003));
-      const ay = rand(p.seed + 911 + Math.floor(t * .002));
-      const driftX = Math.sin(t * .0007 + p.seed) * w * .08 * settings.coverage;
-      const driftY = Math.cos(t * .0006 + p.seed) * h * .08 * settings.coverage;
+  const targetFor = (index, out = target) => {
+    const seed = particleSeed[index];
+    if (particleField[index]) {
+      const ax = rand(seed + Math.floor(t * .003));
+      const ay = rand(seed + 911 + Math.floor(t * .002));
+      const driftX = Math.sin(t * .0007 + seed) * w * .08 * settings.coverage;
+      const driftY = Math.cos(t * .0006 + seed) * h * .08 * settings.coverage;
       out.x = w * (.08 + ax * .84) + driftX;
       out.y = h * (.08 + ay * .84) + driftY;
       return out;
     }
-    const n = (rand(p.seed + Math.floor(t * .018)) - .5) * (settings.turbulence + settings.scatter + dispersalPulse * .5);
-    const u = ((p.seed * .618033 + t * .00035) % 1) * 2 - 1;
+    const n = (rand(seed + Math.floor(t * .018)) - .5) * (settings.turbulence + settings.scatter + dispersalPulse * .5);
+    const u = ((seed * .618033 + t * .00035) % 1) * 2 - 1;
     const abs = Math.abs(u);
     const structureStep = Math.round(u * 18) / 18;
     const structuredU = u * (1 - settings.dataStructure * .42) + structureStep * settings.dataStructure * .42;
@@ -1148,7 +1193,7 @@ export function createMurmurationBackground(el, {
     } else if (settings.shape === "arch") {
       y = h * .68 - Math.sin((1 - abs) * Math.PI) * h * .34 * settings.crest + n * band;
     } else if (settings.shape === "vortex") {
-      const turn = u * Math.PI * 2.4 + t * .003 + p.seed * .01;
+      const turn = u * Math.PI * 2.4 + t * .003 + seed * .01;
       const radius = (.12 + abs * .42 + n * .04) * minDimension * settings.spread * settings.formationScale;
       x = w * .5 + Math.cos(turn) * radius;
       y = h * .54 + Math.sin(turn) * radius * (.5 + settings.arch * .5);
@@ -1160,8 +1205,8 @@ export function createMurmurationBackground(el, {
       x = w * .5 + Math.cos(turn) * radius;
       y = h * .55 + Math.sin(turn) * radius * (.35 + settings.arch * .55);
     } else if (settings.shape === "circle") {
-      const turn = rand(p.seed + 307) * Math.PI * 2 + t * .00035;
-      const radius = Math.sqrt(rand(p.seed + 719)) * minDimension * .38 * settings.spread * settings.formationScale;
+      const turn = rand(seed + 307) * Math.PI * 2 + t * .00035;
+      const radius = Math.sqrt(rand(seed + 719)) * minDimension * .38 * settings.spread * settings.formationScale;
       x = w * .5 + Math.cos(turn) * radius + n * band * .25;
       y = h * .55 + Math.sin(turn) * radius + n * band * .25;
     } else if (settings.shape === "flock") {
@@ -1176,7 +1221,7 @@ export function createMurmurationBackground(el, {
       x = w * (.17 + travel * .66) * settings.spread * settings.formationScale;
       y = h * (.24 + Math.pow(travel, 1.7) * .56) - lift + n * band * .55;
     } else if (settings.shape === "split-flock") {
-      const branch = rand(p.seed + 611) > .5 ? -1 : 1;
+      const branch = rand(seed + 611) > .5 ? -1 : 1;
       const localU = structuredU * .78;
       x = w * .5 + branch * w * .19 * settings.spread + localU * w * .28 * settings.spread * settings.formationScale;
       y = h * (.55 + branch * .045) + Math.sin(localU * Math.PI * 1.3 + t * .0018) * h * .12 * settings.crest + n * band * .55;
@@ -1185,10 +1230,10 @@ export function createMurmurationBackground(el, {
     const coverageLift = 1 + settings.coverage * .38;
     x = w * .5 + (x - w * .5) * expansion * coverageLift;
     y = h * .55 + (y - h * .55) * expansion * (1 + settings.coverage * .5);
-    x += (rand(p.seed + 101) - .5) * w * (.08 + settings.coverage * .18) * settings.scatter * (1.3 - settings.calmness * .5);
-    y += (rand(p.seed + 202) - .5) * h * (.08 + settings.coverage * .2) * settings.scatter * (1.3 - settings.calmness * .5);
+    x += (rand(seed + 101) - .5) * w * (.08 + settings.coverage * .18) * settings.scatter * (1.3 - settings.calmness * .5);
+    y += (rand(seed + 202) - .5) * h * (.08 + settings.coverage * .2) * settings.scatter * (1.3 - settings.calmness * .5);
     const hollow = Math.exp(-u * u * 18) * settings.arch * settings.negativeSpace;
-    if (rand(p.seed + 42) < hollow * .55) y += h * (.13 + .16 * rand(p.seed + 9));
+    if (rand(seed + 42) < hollow * .55) y += h * (.13 + .16 * rand(seed + 9));
     const dx = x - centerX, dy = y - centerY;
     if (settings.axis === "vertical") {
       x = centerX + dy; y = centerY + dx;
@@ -1203,21 +1248,19 @@ export function createMurmurationBackground(el, {
   };
   const syncParticleCount = () => {
     const count = effectiveParticleCount();
-    while (particles.length < count) particles.push(makeParticle(particles.length + 1));
-    particles.length = count;
-    particles.forEach((particle, index) => {
-      particle.index = particle.index || index + 1;
-      particle.field = rand(particle.index + 77) < settings.ambientParticles;
-    });
+    ensureParticleCapacity(count);
+    while (particleCount < count) resetParticle(particleCount, particleCount + 1);
+    particleCount = count;
+    for (let i = 0; i < particleCount; i++) particleField[i] = rand(i + 78) < settings.ambientParticles ? 1 : 0;
   };
   const nudgeTowardsFormation = (multiplier = .02) => {
     updateFrameConstants();
-    particles.forEach(particle => {
-      if (particle.field) return;
-      const target = targetFor(particle);
-      particle.vx += (target.x - particle.x) * multiplier;
-      particle.vy += (target.y - particle.y) * multiplier;
-    });
+    for (let i = 0; i < particleCount; i++) {
+      if (particleField[i]) continue;
+      const nextTarget = targetFor(i);
+      velocityX[i] += (nextTarget.x - particleX[i]) * multiplier;
+      velocityY[i] += (nextTarget.y - particleY[i]) * multiplier;
+    }
   };
   const easeInOutCubic = value => value < .5
     ? 4 * value * value * value
@@ -1297,19 +1340,25 @@ export function createMurmurationBackground(el, {
     const depthScale = settings.depth * .5;
     const fieldOpacity = .34 + settings.coverage * .22;
     const grainScale = settings.grain * .34;
-    for (const p of particles) {
-      const target = targetFor(p);
-      const flow = Math.sin((p.x * .006) + (p.y * .004) + t * .004 + p.seed);
-      p.vx += (target.x - p.x) * attraction + Math.cos(flow + p.seed) * flowForce;
-      p.vy += (target.y - p.y) * attraction + Math.sin(flow * 1.7) * flowForce * .78;
-      p.vx *= damping; p.vy *= damping;
-      p.x += p.vx * movementScale;
-      p.y += p.vy * movementScale;
-      const flicker = rand(p.seed + Math.floor(t * .002));
-      const depth = .32 + depthScale * rand(p.seed + 33);
-      const opacity = (.12 + depth + flicker * grainScale) * (p.field ? fieldOpacity : 1) * centerAttenuationAt(p.x);
+    for (let i = 0; i < particleCount; i++) {
+      const seed = particleSeed[i];
+      const nextTarget = targetFor(i);
+      let x = particleX[i], y = particleY[i], vx = velocityX[i], vy = velocityY[i];
+      const flow = Math.sin((x * .006) + (y * .004) + t * .004 + seed);
+      vx += (nextTarget.x - x) * attraction + Math.cos(flow + seed) * flowForce;
+      vy += (nextTarget.y - y) * attraction + Math.sin(flow * 1.7) * flowForce * .78;
+      vx *= damping; vy *= damping;
+      x += vx * movementScale; y += vy * movementScale;
+      if (x < -20 || x > w + 20 || y < -20 || y > h + 20) {
+        resetParticle(i, seed);
+        x = particleX[i]; y = particleY[i]; vx = velocityX[i]; vy = velocityY[i];
+      }
+      particleX[i] = x; particleY[i] = y; velocityX[i] = vx; velocityY[i] = vy;
+      const flicker = rand(particleSeed[i] + Math.floor(t * .002));
+      const depth = .32 + depthScale * rand(particleSeed[i] + 33);
+      const opacity = (.12 + depth + flicker * grainScale) * (particleField[i] ? fieldOpacity : 1) * centerAttenuationAt(x);
       ctx.globalAlpha = Math.min(.92, Math.max(.04, opacity));
-      ctx.fillRect(p.x, p.y, settings.particleSize, settings.particleSize);
+      ctx.fillRect(x, y, settings.particleSize, settings.particleSize);
     }
     animationId = requestAnimationFrame(frame);
   }
