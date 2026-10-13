@@ -552,9 +552,18 @@
     const controls = controlGroups.flatMap(group => group.controls);
 
     const particles = [];
+    const target = { x: 0, y: 0 };
     let w = 1;
     let h = 1;
     let dpr = 1;
+    let centerX = 0.5;
+    let centerY = 0.55;
+    let minDimension = 1;
+    let rotationCos = 1;
+    let rotationSin = 0;
+    let dispersalPulse = 0;
+    let shapeSubtlety = 1;
+    const diagonalCos = Math.SQRT1_2;
     let t = 0;
     let animationId = 0;
     let transitionFrame = 0;
@@ -746,6 +755,9 @@
       dpr = Math.min(window.devicePixelRatio || 1, renderScale());
       w = Math.max(1, Math.floor(box.width));
       h = Math.max(1, Math.floor(box.height));
+      centerX = w * 0.5;
+      centerY = h * 0.55;
+      minDimension = Math.min(w, h);
       canvas.width = Math.floor(w * dpr);
       canvas.height = Math.floor(h * dpr);
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
@@ -781,18 +793,23 @@
       };
     }
 
-    function targetFor(p, phase) {
-      const pulse = 0.5 + 0.5 * Math.sin(phase * 0.0014);
-      const dispersalPulse = settings.dispersal * pulse;
+    function updateFrameConstants() {
+      const angle = settings.rotation * Math.PI / 180;
+      rotationCos = Math.cos(angle);
+      rotationSin = Math.sin(angle);
+      dispersalPulse = settings.dispersal * (0.5 + 0.5 * Math.sin(t * 0.0014));
+      shapeSubtlety = 0.45 + settings.patternSubtlety * 0.75;
+    }
+
+    function targetFor(p, phase, out = target) {
       if (p.field) {
         const ax = rand(p.seed + Math.floor(phase * 0.003));
         const ay = rand(p.seed + 911 + Math.floor(phase * 0.002));
         const driftX = Math.sin(phase * 0.0007 + p.seed) * w * 0.08 * settings.coverage;
         const driftY = Math.cos(phase * 0.0006 + p.seed) * h * 0.08 * settings.coverage;
-        return {
-          x: w * (0.08 + ax * 0.84) + driftX,
-          y: h * (0.08 + ay * 0.84) + driftY
-        };
+        out.x = w * (0.08 + ax * 0.84) + driftX;
+        out.y = h * (0.08 + ay * 0.84) + driftY;
+        return out;
       }
       const n = (rand(p.seed + Math.floor(phase * 0.018)) - 0.5) * (settings.turbulence + settings.scatter + dispersalPulse * 0.5);
       const u = ((p.seed * 0.618033 + phase * 0.00035) % 1) * 2 - 1;
@@ -800,8 +817,7 @@
       const structureStep = Math.round(u * 18) / 18;
       const structuredU = u * (1 - settings.dataStructure * 0.42) + structureStep * settings.dataStructure * 0.42;
       const structuredAbs = Math.abs(structuredU);
-      const subtlety = 0.45 + settings.patternSubtlety * 0.75;
-      const crest = Math.exp(-structuredAbs * structuredAbs * 5.4) * h * 0.36 * settings.crest * subtlety;
+      const crest = Math.exp(-structuredAbs * structuredAbs * 5.4) * h * 0.36 * settings.crest * shapeSubtlety;
       const wing = Math.pow(abs, 1.7) * h * 0.24 * settings.arch;
       const band = h * (0.025 + 0.21 * settings.density * (1 - Math.exp(-abs * (2 + settings.edgeSoftness * 2.4))));
       let x = w * 0.5 + structuredU * w * 0.54 * settings.spread * settings.formationScale;
@@ -813,19 +829,19 @@
         y = h * 0.68 - Math.sin((1 - abs) * Math.PI) * h * 0.34 * settings.crest + n * band;
       } else if (settings.shape === "vortex") {
         const turn = u * Math.PI * 2.4 + phase * 0.003 + p.seed * 0.01;
-        const radius = (0.12 + abs * 0.42 + n * 0.04) * Math.min(w, h) * settings.spread * settings.formationScale;
+        const radius = (0.12 + abs * 0.42 + n * 0.04) * minDimension * settings.spread * settings.formationScale;
         x = w * 0.5 + Math.cos(turn) * radius;
         y = h * 0.54 + Math.sin(turn) * radius * (0.5 + settings.arch * 0.5);
       } else if (settings.shape === "veil") {
         y = h * (0.5 + u * 0.28) + Math.sin(u * Math.PI * 3 + phase * 0.002) * h * 0.09 * settings.crest + n * band * 1.25;
       } else if (settings.shape === "spiral") {
         const turn = u * Math.PI * 3.6 + phase * 0.0024 + n * 0.7;
-        const radius = (0.08 + abs * 0.54) * Math.min(w, h) * settings.spread * settings.formationScale;
+        const radius = (0.08 + abs * 0.54) * minDimension * settings.spread * settings.formationScale;
         x = w * 0.5 + Math.cos(turn) * radius;
         y = h * 0.55 + Math.sin(turn) * radius * (0.35 + settings.arch * 0.55);
       } else if (settings.shape === "circle") {
         const turn = rand(p.seed + 307) * Math.PI * 2 + phase * 0.00035;
-        const radius = Math.sqrt(rand(p.seed + 719)) * Math.min(w, h) * 0.38 * settings.spread * settings.formationScale;
+        const radius = Math.sqrt(rand(p.seed + 719)) * minDimension * 0.38 * settings.spread * settings.formationScale;
         x = w * 0.5 + Math.cos(turn) * radius + n * band * 0.25;
         y = h * 0.55 + Math.sin(turn) * radius + n * band * 0.25;
       } else if (settings.shape === "flock") {
@@ -856,28 +872,25 @@
       const hollow = Math.exp(-u * u * 18) * settings.arch * settings.negativeSpace;
       if (rand(p.seed + 42) < hollow * 0.55) y += h * (0.13 + 0.16 * rand(p.seed + 9));
 
-      const angle = settings.rotation * Math.PI / 180;
-      const cx = w * 0.5;
-      const cy = h * 0.55;
-      const dx = x - cx;
-      const dy = y - cy;
+      const dx = x - centerX;
+      const dy = y - centerY;
       if (settings.axis === "vertical") {
-        x = cx + dy;
-        y = cy + dx;
+        x = centerX + dy;
+        y = centerY + dx;
       } else if (settings.axis === "diagonal") {
         const diagonal = Math.PI / 4;
-        x = cx + dx * Math.cos(diagonal) - dy * Math.sin(diagonal);
-        y = cy + dx * Math.sin(diagonal) + dy * Math.cos(diagonal);
+        x = centerX + dx * diagonalCos - dy * diagonalCos;
+        y = centerY + dx * diagonalCos + dy * diagonalCos;
       }
-      const rdx = x - cx;
-      const rdy = y - cy;
-      return {
-        x: cx + rdx * Math.cos(angle) - rdy * Math.sin(angle),
-        y: cy + rdx * Math.sin(angle) + rdy * Math.cos(angle)
-      };
+      const rdx = x - centerX;
+      const rdy = y - centerY;
+      out.x = centerX + rdx * rotationCos - rdy * rotationSin;
+      out.y = centerY + rdx * rotationSin + rdy * rotationCos;
+      return out;
     }
 
     function nudgeTowardsFormation(multiplier = 0.02) {
+      updateFrameConstants();
       particles.forEach(particle => {
         if (particle.field) return;
         const target = targetFor(particle, t);
@@ -972,25 +985,30 @@
       animationId = 0;
       if (!shouldAnimate()) return;
       t += 16 * settings.speed;
+      updateFrameConstants();
       ctx.fillStyle = settings.backgroundColor;
       ctx.globalAlpha = settings.fade;
       ctx.fillRect(0, 0, w, h);
       ctx.globalAlpha = 1;
       ctx.fillStyle = settings.particleColor;
+      const attraction = 0.0016 + settings.reformation * 0.0024 + settings.gathering * 0.0012;
+      const flowForce = (0.012 + settings.responsiveness * 0.018) * settings.turbulence * (1.2 - settings.calmness * 0.55);
+      const damping = 0.86 + settings.coordination * 0.08 + settings.calmness * 0.04;
+      const movementScale = settings.speed * (0.65 + settings.responsiveness * 0.55);
+      const depthScale = settings.depth * 0.5;
+      const fieldOpacity = 0.34 + settings.coverage * 0.22;
+      const grainScale = settings.grain * 0.34;
 
       for (let i = 0; i < particles.length; i++) {
         const p = particles[i];
         const target = targetFor(p, t);
         const flow = Math.sin((p.x * 0.006) + (p.y * 0.004) + t * 0.004 + p.seed);
-        const attraction = 0.0016 + settings.reformation * 0.0024 + settings.gathering * 0.0012;
-        const flowForce = (0.012 + settings.responsiveness * 0.018) * settings.turbulence * (1.2 - settings.calmness * 0.55);
         p.vx += (target.x - p.x) * attraction + Math.cos(flow + p.seed) * flowForce;
         p.vy += (target.y - p.y) * attraction + Math.sin(flow * 1.7) * flowForce * 0.78;
-        const damping = 0.86 + settings.coordination * 0.08 + settings.calmness * 0.04;
         p.vx *= damping;
         p.vy *= damping;
-        p.x += p.vx * settings.speed * (0.65 + settings.responsiveness * 0.55);
-        p.y += p.vy * settings.speed * (0.65 + settings.responsiveness * 0.55);
+        p.x += p.vx * movementScale;
+        p.y += p.vy * movementScale;
 
         if (p.x < -20 || p.x > w + 20 || p.y < -20 || p.y > h + 20) {
           const fresh = makeParticle(p.seed);
@@ -1000,9 +1018,8 @@
           p.vy = fresh.vy;
         }
         const flicker = rand(p.seed + Math.floor(t * 0.002));
-        const depth = 0.32 + settings.depth * 0.5 * rand(p.seed + 33);
-        const fieldOpacity = p.field ? 0.34 + settings.coverage * 0.22 : 1;
-        const opacity = (0.12 + depth + flicker * settings.grain * 0.34) * fieldOpacity * centerAttenuationAt(p.x);
+        const depth = 0.32 + depthScale * rand(p.seed + 33);
+        const opacity = (0.12 + depth + flicker * grainScale) * (p.field ? fieldOpacity : 1) * centerAttenuationAt(p.x);
         ctx.globalAlpha = clamp(opacity, 0.04, 0.92);
         ctx.fillRect(p.x, p.y, settings.particleSize, settings.particleSize);
       }
@@ -1068,7 +1085,10 @@ export function createMurmurationBackground(el, {
   Object.assign(canvas.style, { width: "100%", height: "100%", display: "block" });
   el.appendChild(canvas);
   const particles = [];
+  const target = { x: 0, y: 0 };
   let w = 1, h = 1, dpr = 1, t = 0, animationId = 0, transitionFrame = 0;
+  let centerX = .5, centerY = .55, minDimension = 1, rotationCos = 1, rotationSin = 0, dispersalPulse = 0, shapeSubtlety = 1;
+  const diagonalCos = Math.SQRT1_2;
   const reducedMotionQuery = matchMedia("(prefers-reduced-motion: reduce)");
   const rand = seed => {
     const x = Math.sin(seed * 127.1) * 43758.5453123;
@@ -1096,15 +1116,22 @@ export function createMurmurationBackground(el, {
     const field = rand(i + 77) < settings.ambientParticles;
     return { x: field ? Math.random() * w : w * .5 + Math.cos(a) * r * w * .42, y: field ? Math.random() * h : h * .58 + Math.sin(a) * r * h * .28, vx: (Math.random() - .5) * .6, vy: (Math.random() - .5) * .6, seed: i * 13.37 + Math.random() * 900, index: i, field };
   };
-  const targetFor = p => {
-    const pulse = .5 + .5 * Math.sin(t * .0014);
-    const dispersalPulse = settings.dispersal * pulse;
+  const updateFrameConstants = () => {
+    const angle = settings.rotation * Math.PI / 180;
+    rotationCos = Math.cos(angle);
+    rotationSin = Math.sin(angle);
+    dispersalPulse = settings.dispersal * (.5 + .5 * Math.sin(t * .0014));
+    shapeSubtlety = .45 + settings.patternSubtlety * .75;
+  };
+  const targetFor = (p, out = target) => {
     if (p.field) {
       const ax = rand(p.seed + Math.floor(t * .003));
       const ay = rand(p.seed + 911 + Math.floor(t * .002));
       const driftX = Math.sin(t * .0007 + p.seed) * w * .08 * settings.coverage;
       const driftY = Math.cos(t * .0006 + p.seed) * h * .08 * settings.coverage;
-      return { x: w * (.08 + ax * .84) + driftX, y: h * (.08 + ay * .84) + driftY };
+      out.x = w * (.08 + ax * .84) + driftX;
+      out.y = h * (.08 + ay * .84) + driftY;
+      return out;
     }
     const n = (rand(p.seed + Math.floor(t * .018)) - .5) * (settings.turbulence + settings.scatter + dispersalPulse * .5);
     const u = ((p.seed * .618033 + t * .00035) % 1) * 2 - 1;
@@ -1112,8 +1139,7 @@ export function createMurmurationBackground(el, {
     const structureStep = Math.round(u * 18) / 18;
     const structuredU = u * (1 - settings.dataStructure * .42) + structureStep * settings.dataStructure * .42;
     const structuredAbs = Math.abs(structuredU);
-    const subtlety = .45 + settings.patternSubtlety * .75;
-    const crest = Math.exp(-structuredAbs * structuredAbs * 5.4) * h * .36 * settings.crest * subtlety;
+    const crest = Math.exp(-structuredAbs * structuredAbs * 5.4) * h * .36 * settings.crest * shapeSubtlety;
     const wing = Math.pow(abs, 1.7) * h * .24 * settings.arch;
     const band = h * (.025 + .21 * settings.density * (1 - Math.exp(-abs * (2 + settings.edgeSoftness * 2.4))));
     let x = w * .5 + structuredU * w * .54 * settings.spread * settings.formationScale, y = h * (.62 + .09 * Math.sin(u * Math.PI + t * .002)) - crest + wing + n * band;
@@ -1123,19 +1149,19 @@ export function createMurmurationBackground(el, {
       y = h * .68 - Math.sin((1 - abs) * Math.PI) * h * .34 * settings.crest + n * band;
     } else if (settings.shape === "vortex") {
       const turn = u * Math.PI * 2.4 + t * .003 + p.seed * .01;
-      const radius = (.12 + abs * .42 + n * .04) * Math.min(w, h) * settings.spread * settings.formationScale;
+      const radius = (.12 + abs * .42 + n * .04) * minDimension * settings.spread * settings.formationScale;
       x = w * .5 + Math.cos(turn) * radius;
       y = h * .54 + Math.sin(turn) * radius * (.5 + settings.arch * .5);
     } else if (settings.shape === "veil") {
       y = h * (.5 + u * .28) + Math.sin(u * Math.PI * 3 + t * .002) * h * .09 * settings.crest + n * band * 1.25;
     } else if (settings.shape === "spiral") {
       const turn = u * Math.PI * 3.6 + t * .0024 + n * .7;
-      const radius = (.08 + abs * .54) * Math.min(w, h) * settings.spread * settings.formationScale;
+      const radius = (.08 + abs * .54) * minDimension * settings.spread * settings.formationScale;
       x = w * .5 + Math.cos(turn) * radius;
       y = h * .55 + Math.sin(turn) * radius * (.35 + settings.arch * .55);
     } else if (settings.shape === "circle") {
       const turn = rand(p.seed + 307) * Math.PI * 2 + t * .00035;
-      const radius = Math.sqrt(rand(p.seed + 719)) * Math.min(w, h) * .38 * settings.spread * settings.formationScale;
+      const radius = Math.sqrt(rand(p.seed + 719)) * minDimension * .38 * settings.spread * settings.formationScale;
       x = w * .5 + Math.cos(turn) * radius + n * band * .25;
       y = h * .55 + Math.sin(turn) * radius + n * band * .25;
     } else if (settings.shape === "flock") {
@@ -1163,16 +1189,17 @@ export function createMurmurationBackground(el, {
     y += (rand(p.seed + 202) - .5) * h * (.08 + settings.coverage * .2) * settings.scatter * (1.3 - settings.calmness * .5);
     const hollow = Math.exp(-u * u * 18) * settings.arch * settings.negativeSpace;
     if (rand(p.seed + 42) < hollow * .55) y += h * (.13 + .16 * rand(p.seed + 9));
-    const angle = settings.rotation * Math.PI / 180, cx = w * .5, cy = h * .55, dx = x - cx, dy = y - cy;
+    const dx = x - centerX, dy = y - centerY;
     if (settings.axis === "vertical") {
-      x = cx + dy; y = cy + dx;
+      x = centerX + dy; y = centerY + dx;
     } else if (settings.axis === "diagonal") {
-      const diagonal = Math.PI / 4;
-      x = cx + dx * Math.cos(diagonal) - dy * Math.sin(diagonal);
-      y = cy + dx * Math.sin(diagonal) + dy * Math.cos(diagonal);
+      x = centerX + dx * diagonalCos - dy * diagonalCos;
+      y = centerY + dx * diagonalCos + dy * diagonalCos;
     }
-    const rdx = x - cx, rdy = y - cy;
-    return { x: cx + rdx * Math.cos(angle) - rdy * Math.sin(angle), y: cy + rdx * Math.sin(angle) + rdy * Math.cos(angle) };
+    const rdx = x - centerX, rdy = y - centerY;
+    out.x = centerX + rdx * rotationCos - rdy * rotationSin;
+    out.y = centerY + rdx * rotationSin + rdy * rotationCos;
+    return out;
   };
   const syncParticleCount = () => {
     const count = effectiveParticleCount();
@@ -1184,6 +1211,7 @@ export function createMurmurationBackground(el, {
     });
   };
   const nudgeTowardsFormation = (multiplier = .02) => {
+    updateFrameConstants();
     particles.forEach(particle => {
       if (particle.field) return;
       const target = targetFor(particle);
@@ -1198,6 +1226,7 @@ export function createMurmurationBackground(el, {
     const box = el.getBoundingClientRect();
     dpr = Math.min(window.devicePixelRatio || 1, renderScale());
     w = Math.max(1, Math.floor(box.width)); h = Math.max(1, Math.floor(box.height));
+    centerX = w * .5; centerY = h * .55; minDimension = Math.min(w, h);
     canvas.width = Math.floor(w * dpr); canvas.height = Math.floor(h * dpr);
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     syncParticleCount();
@@ -1258,23 +1287,27 @@ export function createMurmurationBackground(el, {
     animationId = 0;
     if (!shouldAnimate()) return;
     t += 16 * settings.speed;
+    updateFrameConstants();
     ctx.globalAlpha = settings.fade; ctx.fillStyle = settings.backgroundColor; ctx.fillRect(0, 0, w, h);
     ctx.globalAlpha = 1; ctx.fillStyle = settings.particleColor;
+    const attraction = .0016 + settings.reformation * .0024 + settings.gathering * .0012;
+    const flowForce = (.012 + settings.responsiveness * .018) * settings.turbulence * (1.2 - settings.calmness * .55);
+    const damping = .86 + settings.coordination * .08 + settings.calmness * .04;
+    const movementScale = settings.speed * (.65 + settings.responsiveness * .55);
+    const depthScale = settings.depth * .5;
+    const fieldOpacity = .34 + settings.coverage * .22;
+    const grainScale = settings.grain * .34;
     for (const p of particles) {
       const target = targetFor(p);
       const flow = Math.sin((p.x * .006) + (p.y * .004) + t * .004 + p.seed);
-      const attraction = .0016 + settings.reformation * .0024 + settings.gathering * .0012;
-      const flowForce = (.012 + settings.responsiveness * .018) * settings.turbulence * (1.2 - settings.calmness * .55);
       p.vx += (target.x - p.x) * attraction + Math.cos(flow + p.seed) * flowForce;
       p.vy += (target.y - p.y) * attraction + Math.sin(flow * 1.7) * flowForce * .78;
-      const damping = .86 + settings.coordination * .08 + settings.calmness * .04;
       p.vx *= damping; p.vy *= damping;
-      p.x += p.vx * settings.speed * (.65 + settings.responsiveness * .55);
-      p.y += p.vy * settings.speed * (.65 + settings.responsiveness * .55);
+      p.x += p.vx * movementScale;
+      p.y += p.vy * movementScale;
       const flicker = rand(p.seed + Math.floor(t * .002));
-      const depth = .32 + settings.depth * .5 * rand(p.seed + 33);
-      const fieldOpacity = p.field ? .34 + settings.coverage * .22 : 1;
-      const opacity = (.12 + depth + flicker * settings.grain * .34) * fieldOpacity * centerAttenuationAt(p.x);
+      const depth = .32 + depthScale * rand(p.seed + 33);
+      const opacity = (.12 + depth + flicker * grainScale) * (p.field ? fieldOpacity : 1) * centerAttenuationAt(p.x);
       ctx.globalAlpha = Math.min(.92, Math.max(.04, opacity));
       ctx.fillRect(p.x, p.y, settings.particleSize, settings.particleSize);
     }
