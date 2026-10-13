@@ -565,6 +565,7 @@
       information: null,
       response: null
     };
+    const reducedMotionQuery = matchMedia("(prefers-reduced-motion: reduce)");
 
     const aiResponseDefaults = {
       coverage: 0.9,
@@ -726,9 +727,23 @@
       stateConfigs[previewState] = stateSnapshot();
     }
 
+    function isConstrainedDevice() {
+      const cores = navigator.hardwareConcurrency || 8;
+      const memory = navigator.deviceMemory || 8;
+      return w < 768 || cores <= 4 || memory <= 4;
+    }
+
+    function effectiveParticleCount() {
+      return Math.min(settings.particles, isConstrainedDevice() ? 6000 : 10000);
+    }
+
+    function renderScale() {
+      return isConstrainedDevice() ? 0.75 : 1;
+    }
+
     function resize() {
       const box = canvas.getBoundingClientRect();
-      dpr = Math.min(window.devicePixelRatio || 1, 2);
+      dpr = Math.min(window.devicePixelRatio || 1, renderScale());
       w = Math.max(1, Math.floor(box.width));
       h = Math.max(1, Math.floor(box.height));
       canvas.width = Math.floor(w * dpr);
@@ -739,13 +754,16 @@
     }
 
     function syncParticleCount() {
-      while (particles.length < settings.particles) particles.push(makeParticle(particles.length + 1));
-      particles.length = settings.particles;
+      const count = effectiveParticleCount();
+      while (particles.length < count) particles.push(makeParticle(particles.length + 1));
+      particles.length = count;
       particles.forEach((particle, index) => {
         particle.index = particle.index || index + 1;
         particle.field = rand(particle.index + 77) < settings.ambientParticles;
       });
-      readout.textContent = `${settings.particles.toLocaleString("en-US")} particles`;
+      readout.textContent = count === settings.particles
+        ? `${count.toLocaleString("en-US")} particles`
+        : `${count.toLocaleString("en-US")} active / ${settings.particles.toLocaleString("en-US")}`;
     }
 
     function makeParticle(i) {
@@ -931,7 +949,28 @@
       syncControlsFromSettings();
     }
 
+    function shouldAnimate() {
+      return !document.hidden && !reducedMotionQuery.matches;
+    }
+
+    function stopAnimation() {
+      cancelAnimationFrame(animationId);
+      animationId = 0;
+    }
+
+    function startAnimation() {
+      if (!shouldAnimate() || animationId) return;
+      animationId = requestAnimationFrame(draw);
+    }
+
+    function updateAnimationState() {
+      if (shouldAnimate()) startAnimation();
+      else stopAnimation();
+    }
+
     function draw() {
+      animationId = 0;
+      if (!shouldAnimate()) return;
       t += 16 * settings.speed;
       ctx.fillStyle = settings.backgroundColor;
       ctx.globalAlpha = settings.fade;
@@ -1030,6 +1069,7 @@ export function createMurmurationBackground(el, {
   el.appendChild(canvas);
   const particles = [];
   let w = 1, h = 1, dpr = 1, t = 0, animationId = 0, transitionFrame = 0;
+  const reducedMotionQuery = matchMedia("(prefers-reduced-motion: reduce)");
   const rand = seed => {
     const x = Math.sin(seed * 127.1) * 43758.5453123;
     return x - Math.floor(x);
@@ -1044,6 +1084,13 @@ export function createMurmurationBackground(el, {
     const centerBand = smoothstep(.15, .25, horizontalPosition) * (1 - smoothstep(.75, .85, horizontalPosition));
     return 1 - centerBand * settings.centerAttenuation * .95;
   };
+  const isConstrainedDevice = () => {
+    const cores = navigator.hardwareConcurrency || 8;
+    const memory = navigator.deviceMemory || 8;
+    return w < 768 || cores <= 4 || memory <= 4;
+  };
+  const effectiveParticleCount = () => Math.min(settings.particles, isConstrainedDevice() ? 6000 : 10000);
+  const renderScale = () => isConstrainedDevice() ? .75 : 1;
   const makeParticle = i => {
     const r = Math.sqrt(Math.random()), a = Math.random() * Math.PI * 2;
     const field = rand(i + 77) < settings.ambientParticles;
@@ -1128,8 +1175,9 @@ export function createMurmurationBackground(el, {
     return { x: cx + rdx * Math.cos(angle) - rdy * Math.sin(angle), y: cy + rdx * Math.sin(angle) + rdy * Math.cos(angle) };
   };
   const syncParticleCount = () => {
-    while (particles.length < settings.particles) particles.push(makeParticle(particles.length + 1));
-    particles.length = settings.particles;
+    const count = effectiveParticleCount();
+    while (particles.length < count) particles.push(makeParticle(particles.length + 1));
+    particles.length = count;
     particles.forEach((particle, index) => {
       particle.index = particle.index || index + 1;
       particle.field = rand(particle.index + 77) < settings.ambientParticles;
@@ -1148,7 +1196,7 @@ export function createMurmurationBackground(el, {
     : 1 - Math.pow(-2 * value + 2, 3) / 2;
   function resize() {
     const box = el.getBoundingClientRect();
-    dpr = Math.min(window.devicePixelRatio || 1, 2);
+    dpr = Math.min(window.devicePixelRatio || 1, renderScale());
     w = Math.max(1, Math.floor(box.width)); h = Math.max(1, Math.floor(box.height));
     canvas.width = Math.floor(w * dpr); canvas.height = Math.floor(h * dpr);
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
@@ -1193,7 +1241,22 @@ export function createMurmurationBackground(el, {
     };
     transitionFrame = requestAnimationFrame(tick);
   }
+  const shouldAnimate = () => !document.hidden && !reducedMotionQuery.matches;
+  const stopAnimation = () => {
+    cancelAnimationFrame(animationId);
+    animationId = 0;
+  };
+  const startAnimation = () => {
+    if (!shouldAnimate() || animationId) return;
+    animationId = requestAnimationFrame(frame);
+  };
+  const updateAnimationState = () => {
+    if (shouldAnimate()) startAnimation();
+    else stopAnimation();
+  };
   function frame() {
+    animationId = 0;
+    if (!shouldAnimate()) return;
     t += 16 * settings.speed;
     ctx.globalAlpha = settings.fade; ctx.fillStyle = settings.backgroundColor; ctx.fillRect(0, 0, w, h);
     ctx.globalAlpha = 1; ctx.fillStyle = settings.particleColor;
@@ -1219,15 +1282,17 @@ export function createMurmurationBackground(el, {
   }
   const onResize = () => resize();
   addEventListener("resize", onResize);
+  document.addEventListener("visibilitychange", updateAnimationState);
+  reducedMotionQuery.addEventListener("change", updateAnimationState);
   resize();
-  frame();
+  startAnimation();
   return {
     canvas,
     get activeState() { return activeState; },
     setState(name, state) { collections[name] = { ...defaultSettings, ...state }; },
     transitionTo,
     update(nextOptions = {}) { Object.assign(settings, nextOptions); syncParticleCount(); },
-    destroy() { cancelAnimationFrame(animationId); cancelAnimationFrame(transitionFrame); removeEventListener("resize", onResize); canvas.remove(); }
+    destroy() { stopAnimation(); cancelAnimationFrame(transitionFrame); removeEventListener("resize", onResize); document.removeEventListener("visibilitychange", updateAnimationState); reducedMotionQuery.removeEventListener("change", updateAnimationState); canvas.remove(); }
   };
 }`;
     }
@@ -1348,8 +1413,11 @@ export function createMurmurationBackground(el, {
 
     refreshExport();
     addEventListener("resize", resize);
+    document.addEventListener("visibilitychange", updateAnimationState);
+    reducedMotionQuery.addEventListener("change", updateAnimationState);
     resize();
-    draw();
+    clearFrame();
+    startAnimation();
   </script>
 </body>
 </html>
