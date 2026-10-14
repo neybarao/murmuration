@@ -774,7 +774,10 @@
     function syncParticleCount() {
       const count = effectiveParticleCount();
       ensureParticleCapacity(count);
-      while (particleCount < count) resetParticle(particleCount, particleCount + 1);
+      while (particleCount < count) {
+        resetParticle(particleCount, particleCount + 1);
+        particleCount += 1;
+      }
       particleCount = count;
       for (let i = 0; i < particleCount; i++) {
         particleField[i] = rand(i + 78) < settings.ambientParticles ? 1 : 0;
@@ -1249,7 +1252,10 @@ export function createMurmurationBackground(el, {
   const syncParticleCount = () => {
     const count = effectiveParticleCount();
     ensureParticleCapacity(count);
-    while (particleCount < count) resetParticle(particleCount, particleCount + 1);
+    while (particleCount < count) {
+      resetParticle(particleCount, particleCount + 1);
+      particleCount += 1;
+    }
     particleCount = count;
     for (let i = 0; i < particleCount; i++) particleField[i] = rand(i + 78) < settings.ambientParticles ? 1 : 0;
   };
