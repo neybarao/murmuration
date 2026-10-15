@@ -235,6 +235,8 @@ const murmuration = reducedMotion
 - `particles` remains the visual-density setting in the exported configuration, but runtime quality limits it to `10000` active particles on desktop-class devices and `6000` on narrow or constrained devices. The configuration object is not changed.
 - The internal canvas uses a maximum device-pixel ratio of `1` on desktop-class devices and `0.75` on constrained devices. The CSS size remains unchanged.
 - Particle positions, velocity, seeds, and ambient flags use typed arrays internally to reduce garbage collection and per-frame memory overhead.
+- Static random values are cached per particle and refreshed when its seed changes. This uses 64 additional bytes per allocated particle in exchange for fewer repeated calculations. A disabled center attenuation bypasses the mask calculation.
+- Flicker and motion randomness are cached until their respective simulation-time intervals change, and refreshed or invalidated when a particle resets. These temporal caches add 56 bytes per allocated particle (8 for flicker, 48 for motion). They do not change the exported configuration or reduce the simulation frequency. Browser CPU savings must be measured on the target device.
 - Start from the tuned `16000` particles as a visual upper bound and test the resulting active count on target hardware.
 - Use one animation instance per visible page or route.
 - Call `destroy()` when a screen unmounts.
