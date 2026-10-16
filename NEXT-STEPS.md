@@ -1,5 +1,15 @@
 # Renderer Exploration Handoff
 
+## WebGL2 Release Update
+
+WebGL2 has been approved as the default renderer, with automatic Canvas 2D fallback
+when initialization is unavailable. CPU simulation and the preset schema are unchanged.
+Browser tests cover actual Copy, Download JS import, preview-link round trips, and
+fallback; run `tests/export-browser.cjs` with Playwright and the local server.
+Particle recycling now seeds from the stable particle index rather than multiplying
+the previous seed repeatedly, avoiding unbounded seed growth during long sessions.
+The exploration notes below describe the original plan, now implemented for rendering.
+
 The optimized Canvas 2D version is the approved baseline. Keep its visual behavior,
 named Home/Chat states, organic transitions, and export API intact.
 
