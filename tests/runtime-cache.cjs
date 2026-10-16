@@ -39,6 +39,7 @@ function boot(html) {
   } };
   const element = () => ({ style: { setProperty() {} }, dataset: {}, classList: { toggle() {} },
     setAttribute() {}, ...eventTarget(), appendChild() {}, remove() {},
+    cloneNode: () => ({ getContext: () => null }),
     getBoundingClientRect: () => ({ width: 1280, height: 720 }), getContext: () => context2d });
   const elements = new Map();
   const sandbox = { Math: math, console, URL, URLSearchParams, TextEncoder, TextDecoder,
@@ -58,12 +59,15 @@ function boot(html) {
   sandbox.window = sandbox;
   const ctx = vm.createContext(sandbox);
   const run = code => vm.runInContext(code, ctx, { timeout: 3000 });
+  if (html.includes('src="./particle-renderer.js"')) run(fs.readFileSync('particle-renderer.js', 'utf8'));
   run(script);
   return { run, pixels, frames, element, ctx, registrations, elements };
 }
 
 const current = fs.readFileSync('index.html', 'utf8');
-const previous = execFileSync('git', ['show', '1887661:index.html'], { encoding: 'utf8' });
+// Compare optimization parity with the same bounded reseeding fix on the old runtime.
+const previous = execFileSync('git', ['show', '1887661:index.html'], { encoding: 'utf8' })
+  .replaceAll('resetParticle(i, seed)', 'resetParticle(i)');
 const baseline = boot(previous);
 const updated = boot(current);
 const attenuationResults = [];
@@ -101,6 +105,19 @@ for (const app of [baseline, updated]) {
 }
 assert.deepEqual(updated.pixels, baseline.pixels, 're-entering particles retain correct opacity');
 assert.equal(updated.run('particleCount'), 10000);
+const recycling = boot(current);
+recycling.run(`
+  settings.speed = 0;
+  particleCount = 1;
+  for (let cycle = 0; cycle < 100; cycle++) {
+    particleX[0] = -100;
+    draw();
+    if (!Number.isFinite(particleSeed[0]) || particleSeed[0] > 914 || particleSeed[0] < 13)
+      throw Error('Particle reseeding must remain bounded');
+    if (!Number.isFinite(particleX[0]) || !Number.isFinite(particleY[0]))
+      throw Error('Particle position must remain finite');
+  }
+`);
 updated.run(`
   var savedSin = Math.sin, randomSinCalls = 0;
   Math.sin = (...args) => { randomSinCalls++; return savedSin(...args); };

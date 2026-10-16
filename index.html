@@ -365,6 +365,9 @@
         display: none;
       }
     }
+    @media (max-width: 480px) {
+      .hud { display: none; }
+    }
   </style>
 </head>
 <body>
@@ -449,9 +452,11 @@
     </aside>
   </main>
 
+  <script src="./particle-renderer.js"></script>
   <script>
-    const canvas = document.getElementById("murmuration");
-    const ctx = canvas.getContext("2d", { alpha: false });
+    const renderer = createParticleRenderer(document.getElementById("murmuration"), new URLSearchParams(location.search).get("renderer") || 'webgl2');
+    const canvas = renderer.canvas;
+    const ctx = renderer.context;
     const readout = document.getElementById("readout");
     const exportCode = document.getElementById("exportCode");
     const interfaceOverlay = document.getElementById("interfaceOverlay");
@@ -1080,7 +1085,7 @@
         y += vy * movementScale;
 
         if (x < -20 || x > w + 20 || y < -20 || y > h + 20) {
-          resetParticle(i, seed);
+          resetParticle(i);
           x = particleX[i]; y = particleY[i];
           vx = velocityX[i]; vy = velocityY[i];
         }
@@ -1095,6 +1100,7 @@
       }
       ctx.globalAlpha = 1;
       animationId = requestAnimationFrame(draw);
+      ctx.flush?.();
     }
 
     function controlMarkup() {
@@ -1137,11 +1143,13 @@
       }, null, 2);
       return `export const murmurationStates = ${exportedStates};
 export const defaultTransitionDuration = ${transitionDuration};
+${createParticleRenderer.toString()}
 
 export function createMurmurationBackground(el, {
   states = murmurationStates,
   initialState,
   transitionDuration = defaultTransitionDuration,
+  renderer = 'webgl2',
   ...options
 } = {}) {
   const defaultSettings = ${defaultSettings};
@@ -1149,8 +1157,9 @@ export function createMurmurationBackground(el, {
   let activeState = initialState && collections[initialState] ? initialState : Object.keys(collections)[0];
   const settings = { ...defaultSettings, ...collections[activeState], ...options };
   Object.assign(settings, options);
-  const canvas = document.createElement("canvas");
-  const ctx = canvas.getContext("2d", { alpha: false });
+  const surface = createParticleRenderer(document.createElement("canvas"), renderer);
+  const canvas = surface.canvas;
+  const ctx = surface.context;
   Object.assign(el.style, { position: "absolute", inset: "0", overflow: "hidden", zIndex: "-1" });
   Object.assign(canvas.style, { width: "100%", height: "100%", display: "block" });
   el.appendChild(canvas);
@@ -1405,6 +1414,7 @@ export function createMurmurationBackground(el, {
   const startAnimation = () => {
     if (!shouldAnimate() || animationId) return;
     animationId = requestAnimationFrame(frame);
+    ctx.flush?.();
   };
   const updateAnimationState = () => {
     if (shouldAnimate()) startAnimation();
@@ -1437,7 +1447,7 @@ export function createMurmurationBackground(el, {
       vx *= damping; vy *= damping;
       x += vx * movementScale; y += vy * movementScale;
       if (x < -20 || x > w + 20 || y < -20 || y > h + 20) {
-        resetParticle(i, seed);
+        resetParticle(i);
         x = particleX[i]; y = particleY[i]; vx = velocityX[i]; vy = velocityY[i];
       }
       particleX[i] = x; particleY[i] = y; velocityX[i] = vx; velocityY[i] = vy;
@@ -1462,7 +1472,7 @@ export function createMurmurationBackground(el, {
     setState(name, state) { collections[name] = { ...defaultSettings, ...state }; },
     transitionTo,
     update(nextOptions = {}) { Object.assign(settings, nextOptions); syncParticleCount(); },
-    destroy() { stopAnimation(); cancelAnimationFrame(transitionFrame); removeEventListener("resize", onResize); document.removeEventListener("visibilitychange", updateAnimationState); reducedMotionQuery.removeEventListener("change", updateAnimationState); canvas.remove(); }
+    destroy() { stopAnimation(); cancelAnimationFrame(transitionFrame); removeEventListener("resize", onResize); document.removeEventListener("visibilitychange", updateAnimationState); reducedMotionQuery.removeEventListener("change", updateAnimationState); ctx.destroy?.(); canvas.remove(); }
   };
 }`;
     }
@@ -1511,6 +1521,7 @@ export function createMurmurationBackground(el, {
     transitionDurationInput.addEventListener("change", () => {
       transitionDuration = clamp(Number(transitionDurationInput.value) || 0, 0, 5000);
       transitionDurationInput.value = transitionDuration;
+      refreshExport();
       updatePreviewUrl();
     });
 

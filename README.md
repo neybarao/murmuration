@@ -1,6 +1,29 @@
 # Murmuration Background
 
-Murmuration Background is a dependency-free Canvas 2D animation for web application backgrounds. It renders a field of particles that behaves like a flock and can reorganize between named visual states.
+## Rendering Backend
+
+The runtime defaults to native WebGL2 rendering with the existing CPU simulation.
+Compare `?renderer=webgl2` with `?renderer=canvas2d` using the same shared configuration
+(append `&renderer=...` when a query string already exists). Open one version at a time.
+If WebGL2 initialization is unavailable or fails, the app uses Canvas 2D.
+
+Download JS embeds the renderer with no dependencies or new preset fields. The factory
+accepts an optional runtime setting: `{ renderer: "canvas2d" }` forces the baseline;
+the default is `"webgl2"`.
+
+Particles use one instanced draw, plus a background draw. Fractional square coverage
+is computed in the fragment shader. Exact visual equivalence with Canvas compositing
+is not guaranteed, and CPU/GPU/power improvements require measurement. This renderer
+uses `preserveDrawingBuffer` for trails, which may add GPU cost. Context restoration
+rebuilds GPU resources but starts with an empty trail history.
+
+Run `node tests/runtime-cache.cjs` for fallback regression tests. With Playwright and
+Chrome available and a local server on port 4174, run `node tests/webgl-browser.cjs`
+for browser rendering, exported module, and desktop/mobile checks.
+
+## Baseline
+
+Murmuration Background is a dependency-free WebGL2 animation with Canvas 2D fallback for web application backgrounds. It renders a field of particles that behaves like a flock and can reorganize between named visual states.
 
 The lab at [www.neybarao.com/murmuration](https://www.neybarao.com/murmuration/) is the source of truth for visual tuning. Use **Download JS** to generate a self-contained ES module with the current `home` and `chat` state collections.
 
