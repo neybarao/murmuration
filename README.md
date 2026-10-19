@@ -210,6 +210,10 @@ Two formations are not a function of a single coordinate:
 - `circle` is a flat ring facing the viewer with nothing in the middle. `spread` and `formationScale` set its radius, `scatter` loosens it, and `crest` adds a slow ripple along the circumference. It ignores `axis` and `rotation`, which cannot change a circle. Ambient particles orbit outside the ring instead of crossing the middle.
 - `swoop` is a cloud that wanders across the screen, wheels, and expands and contracts like a breath, with no repeating track. `spread` and `formationScale` set its length and `crest` the ripple along its edges. `axis` and `rotation` still apply on top of its own heading.
 
+## Preview Link and Hosted Pages
+
+Run locally, **Copy preview link** copies the page address with the settings in `?config=`. Hosted pages that sit inside a frame drop the query string, so the link could not carry the settings. A page built with `node tools/build-artifact.cjs <published-url> <out-file>` is one self-contained file that can save the settings into itself: **Copy preview link** copies the published address, then republishes the page with the current Home/Chat settings, colors, theme and transition duration. Opening that address shows exactly those settings. This needs permission to republish the page (editors only), and each save replaces the previous one. `tests/hosted-save.cjs` covers the round trip.
+
 ## Light and Dark Themes
 
 Each state stores one color pair per theme, so Home and Chat each have their own light and dark colors. The lab's Light/Dark switch only chooses which pair is shown and edited; nothing is overwritten when you switch screens or themes. The exported file carries both pairs.

@@ -529,6 +529,9 @@
     </aside>
   </main>
 
+  <!-- Filled in by tools/build-artifact.cjs for the hosted page; both stay empty when run locally. -->
+  <script type="application/json" id="savedConfig"></script>
+  <script type="text/plain" id="pageTemplate"></script>
   <script src="./particle-renderer.js"></script>
   <script src="./murmuration-runtime.js"></script>
   <script src="./murmuration-export.js"></script>
@@ -657,25 +660,69 @@
     }
 
     // A malformed link never blocks the editor: anything unreadable falls back to the defaults.
+    function applyShared(shared) {
+      if (!shared || typeof shared !== "object") throw new Error("Not a config object");
+      if (shared.theme === "dark") theme = "dark";
+      if (typeof shared.overlay === "boolean") overlayVisible = shared.overlay;
+      if (typeof shared.transitionDuration === "number" && Number.isFinite(shared.transitionDuration)) {
+        transitionDuration = clamp(shared.transitionDuration, 0, 5000);
+      }
+      const legacyTheme = shared.version === 3 ? null : theme;
+      const source = shared.states && typeof shared.states === "object" ? shared.states : { information: shared };
+      Object.keys(states).forEach(name => {
+        states[name] = sanitizeState(source[name], states[name], legacyTheme);
+      });
+      if (Object.prototype.hasOwnProperty.call(states, shared.activeState)) activeState = shared.activeState;
+    }
+
+    // A link's ?config wins. Otherwise a hosted page opens with the config saved into it.
     function loadSharedConfig() {
-      const encoded = new URLSearchParams(location.search).get("config");
-      if (!encoded) return;
       try {
-        const shared = decodeSettings(encoded);
-        if (!shared || typeof shared !== "object") throw new Error("Not a config object");
-        if (shared.theme === "dark") theme = "dark";
-        if (typeof shared.overlay === "boolean") overlayVisible = shared.overlay;
-        if (typeof shared.transitionDuration === "number" && Number.isFinite(shared.transitionDuration)) {
-          transitionDuration = clamp(shared.transitionDuration, 0, 5000);
-        }
-        const legacyTheme = shared.version === 3 ? null : theme;
-        const source = shared.states && typeof shared.states === "object" ? shared.states : { information: shared };
-        Object.keys(states).forEach(name => {
-          states[name] = sanitizeState(source[name], states[name], legacyTheme);
-        });
-        if (Object.prototype.hasOwnProperty.call(states, shared.activeState)) activeState = shared.activeState;
+        const encoded = new URLSearchParams(location.search).get("config");
+        if (encoded) return applyShared(decodeSettings(encoded));
+        const saved = (el("savedConfig").textContent || "").trim();
+        if (saved) applyShared(JSON.parse(saved));
       } catch (error) {
         console.warn("Could not load shared murmuration config.", error);
+      }
+    }
+
+    // Hosted pages sit in a frame that drops the address bar's query string, so a link with ?config
+    // cannot carry the settings. There the settings are saved into the page itself and the link
+    // is the page's own address.
+    const hostedUrl = () => document.querySelector('meta[name="published-url"]')?.content || "";
+    // The template travels inside a script element, so a closing script tag and an HTML comment opener are stored disguised.
+    const unescapeTemplate = text => text.replace(/<@\/script/g, "</script").replace(new RegExp("<@" + "!--", "g"), "<!" + "--");
+    const escapeTemplate = text => text.replace(/<\/script/g, "<@" + "/script").replace(new RegExp("<" + "!--", "g"), "<@" + "!--");
+    const hostedTemplate = () => unescapeTemplate(el("pageTemplate").textContent);
+    const SKELETON_HEAD = '<!doctype html><html><head><meta charset=utf8><meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover"><style>:root{color-scheme:light}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#fff;color:#000}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}</style></head><body>\n';
+    const SAVED_EMPTY = '<script type="application/json" id="savedConfig"></' + 'script>';
+    const TEMPLATE_EMPTY = '<script type="text/plain" id="pageTemplate"></' + 'script>';
+
+    function hostedDocument() {
+      const template = hostedTemplate();
+      const json = JSON.stringify(sharedPreviewState()).replace(/</g, "\\u003c");
+      const saved = '<script type="application/json" id="savedConfig">' + json + '</' + 'script>';
+      const holder = '<script type="text/plain" id="pageTemplate">' + escapeTemplate(template) + '</' + 'script>';
+      // Function replacers keep "$" in the template from being read as replacement patterns.
+      const page = template.replace(SAVED_EMPTY, () => saved).replace(TEMPLATE_EMPTY, () => holder);
+      return SKELETON_HEAD + page + "\n</body></html>";
+    }
+
+    async function savePreviewLink() {
+      let publisher = null;
+      try { publisher = window.claude && window.claude.use ? await window.claude.use("artifact") : null; } catch (error) { publisher = null; }
+      if (!publisher || !hostedUrl() || !hostedTemplate().trim()) return copyText(getPreviewUrl(), "Preview link", linkField);
+      // Copy first: publishing reloads the page, and a copy needs this click to still be in effect.
+      await copyText(hostedUrl(), "Preview link", linkField);
+      announce("Saving your settings into the link...");
+      try {
+        await publisher.publish(hostedDocument());
+      } catch (error) {
+        const code = error && error.code;
+        announce(code === "not_writer" || code === "not_granted"
+          ? "Only editors of this page can save settings into the link."
+          : "Could not save the settings into the link. Try again.", true);
       }
     }
 
@@ -901,7 +948,7 @@
     });
 
     copyBtn.addEventListener("click", () => copyText(exportCode.value, "Snippet"));
-    copyPreviewBtn.addEventListener("click", () => copyText(getPreviewUrl(), "Preview link", linkField));
+    copyPreviewBtn.addEventListener("click", savePreviewLink);
 
     downloadBtn.addEventListener("click", saveModule);
 
