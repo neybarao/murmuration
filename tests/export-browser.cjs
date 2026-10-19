@@ -61,7 +61,7 @@ const { chromium } = require('playwright');
       };
     });
     await fallback.goto(url);
-    assert.equal(await fallback.evaluate(() => renderer.backend), 'canvas2d');
+    assert.equal(await fallback.evaluate(() => canvas.dataset.renderer), 'canvas2d');
     assert.deepEqual(await fallback.evaluate(() => sharedPreviewState()), expected);
     assert.deepEqual(errors, []);
     console.log('PASS actual Copy, Download JS/import, duration, named states, colors, fresh preview and automatic Canvas fallback');

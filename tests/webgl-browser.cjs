@@ -9,7 +9,7 @@ const { chromium } = require('playwright');
       page.on('pageerror', error => errors.push(error.message));
       await page.goto('http://127.0.0.1:4174/?renderer=webgl2');
       await page.waitForTimeout(1000);
-      assert.equal(await page.evaluate(() => renderer.backend), 'webgl2');
+      assert.equal(await page.evaluate(() => canvas.dataset.renderer), 'webgl2');
       const pixels = () => page.evaluate(() => {
         const gl = canvas.getContext('webgl2');
         const data = new Uint8Array(canvas.width * canvas.height * 4);
@@ -69,7 +69,7 @@ const { chromium } = require('playwright');
       assert((await pixels()).dark > 100);
       assert.deepEqual(errors, []);
       await page.goto('http://127.0.0.1:4174/?renderer=canvas2d');
-      assert.equal(await page.evaluate(() => renderer.backend), 'canvas2d');
+      assert.equal(await page.evaluate(() => canvas.dataset.renderer), 'canvas2d');
       await page.close();
       console.log('PASS WebGL2 rendering, motion, transitions, export and Canvas fallback:', viewport);
     }

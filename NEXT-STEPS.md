@@ -1,5 +1,14 @@
 # Renderer Exploration Handoff
 
+## Single Runtime Refactor
+
+The editor preview and the exported module now share one runtime
+(`murmuration-runtime.js`). The duplicated simulation that used to live in `index.html`
+was removed. `tests/runtime-cache.cjs` compares the new runtime against the pre-refactor
+editor (commit `a0f4cf9`) draw call by draw call, so any behavior change shows up as a
+failing hash. See the README "Architecture" section for the file layout and the
+self-containment rule that Download JS depends on.
+
 ## WebGL2 Release Update
 
 WebGL2 has been approved as the default renderer, with automatic Canvas 2D fallback

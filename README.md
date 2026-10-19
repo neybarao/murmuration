@@ -21,6 +21,19 @@ Run `node tests/runtime-cache.cjs` for fallback regression tests. With Playwrigh
 Chrome available and a local server on port 4174, run `node tests/webgl-browser.cjs`
 for browser rendering, exported module, and desktop/mobile checks.
 
+## Architecture
+
+One runtime drives both the lab preview and the downloaded module, so a behavior change is made once.
+
+| File | Responsibility |
+| --- | --- |
+| `murmuration-runtime.js` | `createMurmurationRuntime()`: simulation, state transitions, lifecycle. Also defines `MURMURATION_DEFAULTS`, the single source of default parameter values. |
+| `particle-renderer.js` | `createParticleRenderer()`: batched WebGL2 drawing with automatic Canvas 2D fallback. |
+| `murmuration-export.js` | Builds the downloadable module and the integration snippet. |
+| `index.html` | Editor only: controls, saved Home/Chat collections, share links, overlays. It drives the runtime through its public API (`update`, `setState`, `transitionTo`, `clear`), as an integrator would. |
+
+Download JS serializes `createParticleRenderer`, `createMurmurationRuntime` and `MURMURATION_DEFAULTS` with `Function.prototype.toString()`. For that reason `createMurmurationRuntime` and `createParticleRenderer` must stay self-contained: they may reference only each other and `MURMURATION_DEFAULTS`. `tests/runtime-cache.cjs` evaluates the generated module in an empty sandbox to catch a missing dependency.
+
 ## Baseline
 
 Murmuration Background is a dependency-free WebGL2 animation with Canvas 2D fallback for web application backgrounds. It renders a field of particles that behaves like a flock and can reorganize between named visual states.
@@ -139,25 +152,28 @@ murmuration.transitionTo("results");
 
 ### `createMurmurationBackground(element, options)`
 
-Creates the Canvas element, starts the animation loop, and returns a controller.
+Creates the canvas element, starts the animation loop, and returns a controller. The target element is made absolutely positioned and the canvas fills it.
 
 | Option | Type | Description |
 | --- | --- | --- |
 | `states` | `Record<string, State>` | Named state collections. Defaults to `murmurationStates` from the downloaded module. |
 | `initialState` | `string` | State shown at startup. Defaults to the first supplied state. |
 | `transitionDuration` | `number` | Default transition duration in milliseconds. Default: `200`. |
+| `renderer` | `"webgl2"` \| `"canvas2d"` | Backend. Defaults to `"webgl2"` with automatic Canvas 2D fallback. |
 | Other state properties | `State` fields | One-off overrides applied on top of the initial state. |
 
 ### Controller
 
 | Member | Description |
 | --- | --- |
-| `canvas` | The generated `<canvas>` element. |
+| `canvas` | The generated `<canvas>` element. `canvas.dataset.renderer` is `webgl2` or `canvas2d`. |
+| `activeParticles` | Read-only count of particles currently simulated, after runtime limits. |
 | `activeState` | Read-only name of the most recently selected state. |
 | `transitionTo(name, duration?)` | Transitions to a registered state. Throws for an unknown name. |
 | `setState(name, state)` | Adds or replaces a named state. |
-| `update(options)` | Applies direct overrides to the current animation. Prefer named states for application screens. |
-| `destroy()` | Stops animation, removes listeners, and removes the canvas. Call on view teardown. |
+| `update(options)` | Applies direct overrides to the current animation. Changing `shape` steers the flock toward the new formation, and changing `shape` or `axis` clears stale trails. An edit made during a transition becomes part of that transition's destination. Prefer named states for application screens. |
+| `clear()` | Repaints the background color, discarding trails. |
+| `destroy()` | Stops animation, removes listeners and the resize observer, and removes the canvas. Safe to call twice; later calls to the controller are ignored. Call on view teardown. |
 
 ## State Parameters
 
