@@ -70,6 +70,9 @@ function createMurmurationRuntime(el, {
   let particleField = new Uint8Array(0);
   let w = 1, h = 1, dpr = 1, t = 0, animationId = 0, transitionFrame = 0, transition = null, destroyed = false, sized = false;
   let centerX = .5, centerY = .55, minDimension = 1, rotationCos = 1, rotationSin = 0, dispersalPulse = 0, shapeSubtlety = 1;
+  // Per-frame factors for the two formations that are not a simple function of one coordinate.
+  let ringShape = false, ringRadius = 0, ringHalfWidth = 0, haloRadius = 0;
+  let swoopShape = false, swoopX = 0, swoopY = 0, swoopCos = 1, swoopSin = 0, swoopLength = 0, swoopWidth = 0, swoopFitX = 1, swoopFitY = 1;
   const diagonalCos = Math.SQRT1_2;
   const reducedMotionQuery = matchMedia("(prefers-reduced-motion: reduce)");
   const rand = seed => {
@@ -139,6 +142,30 @@ function createMurmurationRuntime(el, {
     rotationSin = Math.sin(angle);
     dispersalPulse = settings.dispersal * (.5 + .5 * Math.sin(t * .0014));
     shapeSubtlety = .45 + settings.patternSubtlety * .75;
+    ringShape = settings.shape === "circle";
+    swoopShape = settings.shape === "swoop";
+    if (ringShape) {
+      // A flat ring facing the viewer: isotropic scale so it stays round, nothing in the middle.
+      const scale = (1 + settings.coverage * .38) * (1 + dispersalPulse * .34 - settings.gathering * .18);
+      ringRadius = minDimension * .26 * settings.spread * settings.formationScale * scale;
+      ringHalfWidth = minDimension * (.01 + .045 * settings.density) * (.6 + .8 * settings.edgeSoftness) * (1 + settings.scatter * .8) * scale;
+      haloRadius = ringRadius * 1.03 + ringHalfWidth;
+    } else if (swoopShape) {
+      // A cloud that wanders, wheels and breathes. Sums of incommensurate sines keep the path
+      // from repeating visibly; the breathing phase is itself slowly modulated.
+      const breath = .5 + .5 * Math.sin(t * .0017 + .8 * Math.sin(t * .0006));
+      const heading = .45 * Math.sin(t * .0007 + .3) + .25 * Math.sin(t * .0017 + 1.1);
+      swoopCos = Math.cos(heading);
+      swoopSin = Math.sin(heading);
+      swoopX = w * (.14 * Math.sin(t * .0006 + .7) + .06 * Math.sin(t * .0015 + 2.1));
+      swoopY = h * (.08 * Math.sin(t * .0008 + 1.9) + .04 * Math.sin(t * .0019));
+      swoopLength = w * .25 * settings.spread * settings.formationScale * (.78 + .44 * breath);
+      swoopWidth = h * (.09 + .17 * settings.density) * (.45 + breath);
+      // The shared post-processing enlarges every shape about the center; pre-divide so the
+      // cloud keeps the size designed here.
+      swoopFitX = 1 / (1 + settings.coverage * .38);
+      swoopFitY = 1 / (1 + settings.coverage * .5);
+    }
   };
   const cachedMotionRandom = (index, slot, epoch, offset = 0) => {
     const base = index * 6 + slot * 2;
@@ -155,11 +182,29 @@ function createMurmurationRuntime(el, {
       const ay = cachedMotionRandom(index, 1, Math.floor(t * .002), 911);
       const driftX = Math.sin(t * .0007 + seed) * w * .08 * settings.coverage;
       const driftY = Math.cos(t * .0006 + seed) * h * .08 * settings.coverage;
+      if (ringShape) {
+        // Each ambient particle orbits near its own bearing. Retargets only hop a short angle, so
+        // their paths never cut across the empty middle of the ring.
+        const angle = staticRandom[index * 8 + 3] * Math.PI * 2 + t * .00022 + (ax - .5) * .6;
+        const radius = haloRadius * (1.08 + ay * .9);
+        out.x = clamp(centerX + Math.cos(angle) * radius + driftX * .5, w * .03, w * .97);
+        out.y = clamp(centerY + Math.sin(angle) * radius + driftY * .5, h * .03, h * .97);
+        return out;
+      }
       out.x = w * (.08 + ax * .84) + driftX;
       out.y = h * (.08 + ay * .84) + driftY;
       return out;
     }
     const n = (cachedMotionRandom(index, 2, Math.floor(t * .018)) - .5) * (settings.turbulence + settings.scatter + dispersalPulse * .5);
+    if (ringShape) {
+      const turn = staticRandom[index * 8] * Math.PI * 2 + t * .00035;
+      // Triangular radial profile: dense core, soft edges.
+      const radial = staticRandom[index * 8 + 1] + staticRandom[index * 8 + 2] - 1;
+      const radius = ringRadius * (1 + Math.sin(turn * 3 + t * .0011) * .02 * settings.crest) + (radial + n * .6) * ringHalfWidth;
+      out.x = centerX + Math.cos(turn) * radius;
+      out.y = centerY + Math.sin(turn) * radius;
+      return out;
+    }
     const u = ((seed * .618033 + t * .00035) % 1) * 2 - 1;
     const abs = Math.abs(u);
     const structureStep = Math.round(u * 18) / 18;
@@ -182,22 +227,20 @@ function createMurmurationRuntime(el, {
       const radius = (.08 + abs * .54) * minDimension * settings.spread * settings.formationScale;
       x = w * .5 + Math.cos(turn) * radius;
       y = h * .55 + Math.sin(turn) * radius * (.35 + settings.arch * .55);
-    } else if (settings.shape === "circle") {
-      const turn = staticRandom[index * 8 + 0] * Math.PI * 2 + t * .00035;
-      const radius = Math.sqrt(staticRandom[index * 8 + 1]) * minDimension * .38 * settings.spread * settings.formationScale;
-      x = w * .5 + Math.cos(turn) * radius + n * band * .25;
-      y = h * .55 + Math.sin(turn) * radius + n * band * .25;
     } else if (settings.shape === "flock") {
       const head = Math.exp(-Math.pow(structuredU + .42, 2) * 28) * h * .3 * settings.crest;
       const shoulder = Math.exp(-Math.pow(structuredU - .12, 2) * 10) * h * .1;
       const trailingWing = Math.pow((structuredU + 1) * .5, 2.15) * h * .24 * settings.arch;
       x += Math.sin((structuredU + .2) * Math.PI) * w * .045 * settings.spread;
       y = h * .66 - head - shoulder + trailingWing + Math.sin(structuredU * Math.PI * 1.6 + t * .0017) * h * .035 + n * band * .72;
-    } else if (settings.shape === "swoop") {
-      const travel = (structuredU + 1) * .5;
-      const lift = Math.exp(-Math.pow(travel - .22, 2) * 25) * h * .12 * settings.crest;
-      x = w * (.17 + travel * .66) * settings.spread * settings.formationScale;
-      y = h * (.24 + Math.pow(travel, 1.7) * .56) - lift + n * band * .55;
+    } else if (swoopShape) {
+      const reach = Math.abs(structuredU), reachPower = reach * Math.sqrt(reach);
+      const along = (structuredU < 0 ? -reachPower : reachPower) * swoopLength;
+      const taper = Math.sqrt(1 - reachPower);
+      const across = ((staticRandom[index * 8 + 1] + staticRandom[index * 8 + 2] - 1) * swoopWidth
+        + Math.sin(structuredU * Math.PI * 1.8 + t * .0023) * swoopWidth * .35 * settings.crest) * taper + n * band * .5;
+      x = centerX + (swoopX + along * swoopCos - across * swoopSin) * swoopFitX;
+      y = centerY + (swoopY + along * swoopSin + across * swoopCos) * swoopFitY;
     } else if (settings.shape === "split-flock") {
       const branch = staticRandom[index * 8 + 2] > .5 ? -1 : 1;
       const localU = structuredU * .78;
@@ -216,7 +259,8 @@ function createMurmurationRuntime(el, {
     x += (staticRandom[index * 8 + 3] - .5) * w * (.08 + settings.coverage * .18) * settings.scatter * (1.3 - settings.calmness * .5);
     y += (staticRandom[index * 8 + 4] - .5) * h * (.08 + settings.coverage * .2) * settings.scatter * (1.3 - settings.calmness * .5);
     const hollow = Math.exp(-u * u * 18) * settings.arch * settings.negativeSpace;
-    if (staticRandom[index * 8 + 5] < hollow * .55) y += h * (.13 + .16 * staticRandom[index * 8 + 6]);
+    // The swoop cloud wheels freely, so a fixed screen-space gap would read as a streak.
+    if (!swoopShape && staticRandom[index * 8 + 5] < hollow * .55) y += h * (.13 + .16 * staticRandom[index * 8 + 6]);
     const dx = x - centerX, dy = y - centerY;
     if (settings.axis === "vertical") {
       x = centerX + dy; y = centerY + dx;

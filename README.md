@@ -234,6 +234,11 @@ All numeric controls should remain within the ranges below. The lab enforces the
 
 `ridge`, `wave`, `arch`, `vortex`, `veil`, `spiral`, `circle`, `flock`, `swoop`, and `split-flock` are supported values for `shape`.
 
+Two formations are not a function of a single coordinate:
+
+- `circle` is a flat ring facing the viewer with nothing in the middle. `spread` and `formationScale` set its radius, `density` and `edgeSoftness` its thickness, `scatter` loosens it, and `crest` adds a slow ripple along the circumference. It ignores `axis`, `rotation` and `arch`, which cannot change a circle. Ambient particles orbit outside the ring instead of crossing the middle.
+- `swoop` is a cloud that wanders across the screen, wheels, and expands and contracts like a breath, with no repeating track. `spread` and `formationScale` set its length, `density` its thickness, and `crest` the ripple along its edges. `axis` and `rotation` still apply on top of its own heading.
+
 ## Light and Dark Host Themes
 
 Theme is intentionally controlled by the host application. Apply colors in each state when a theme changes, then transition or update the animation.

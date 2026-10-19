@@ -15,6 +15,10 @@ const fromGit = file => execFileSync('git', ['show', `${REFERENCE}:${file}`], { 
 const fromDisk = file => fs.readFileSync(file, 'utf8');
 const inlineScript = html => html.slice(html.indexOf('  <script>') + 10, html.lastIndexOf('  </script>'));
 const SHAPES = ['ridge', 'wave', 'arch', 'vortex', 'veil', 'spiral', 'circle', 'flock', 'swoop', 'split-flock'];
+// circle and swoop were redesigned on purpose after the reference commit, so they are covered by
+// geometry tests below instead of draw-for-draw parity.
+const REDESIGNED = ['circle', 'swoop'];
+const UNCHANGED_SHAPES = SHAPES.filter(shape => !REDESIGNED.includes(shape));
 
 function sandbox({ scripts = [], spy = false } = {}) {
   let seed = 12345;
@@ -51,9 +55,15 @@ function sandbox({ scripts = [], spy = false } = {}) {
   };
 
   // Every draw call is hashed rather than stored, so long scenarios stay cheap.
-  let buffer = new Float64Array(1 << 16), length = 0, drawCalls = 0;
+  let buffer = new Float64Array(1 << 16), length = 0, drawCalls = 0, captured = null;
+  const capture = {
+    start() { captured = []; },
+    // Particle positions (draw calls smaller than 3px), flattened as x, y pairs.
+    stop() { const result = captured; captured = null; return result; }
+  };
   const record = (...values) => {
     assert(values.every(Number.isFinite), `non-finite draw value: ${values}`);
+    if (captured && values[2] <= 3) captured.push(values[0], values[1]);
     if (length + values.length > buffer.length) {
       const next = new Float64Array(buffer.length * 2); next.set(buffer); buffer = next;
     }
@@ -102,7 +112,7 @@ function sandbox({ scripts = [], spy = false } = {}) {
     frames.clear();
     for (const [, callback] of pending) callback(timestamp);
   };
-  return { run, step, frames, registrations, element, elements, digest, calls, context };
+  return { run, step, frames, registrations, element, elements, digest, calls, context, capture };
 }
 
 const runtimeScripts = () => [fromDisk('particle-renderer.js'), fromDisk('murmuration-runtime.js'), fromDisk('murmuration-export.js')];
@@ -160,7 +170,7 @@ function phase(label, apply, frames = 4, timestamps) {
 
 phase('initial frames', () => {}, 40);
 phase('center attenuation 0.7', () => { referenceOps.set(reference, { centerAttenuation: 0.7 }); runtimeOps.set(runtime, { centerAttenuation: 0.7 }); });
-for (const shape of SHAPES) {
+for (const shape of UNCHANGED_SHAPES) {
   phase(`shape ${shape}`, () => { referenceOps.set(reference, { shape }); runtimeOps.set(runtime, { shape }); }, 6);
 }
 phase('particle count shrink', () => { referenceOps.set(reference, { particles: 2000 }); runtimeOps.set(runtime, { particles: 2000 }); });
@@ -190,7 +200,73 @@ phase('state transition Chat to Home', () => {
   referenceOps.toState(reference, 'information');
   runtimeOps.toState(runtime, 'information', { ...JSON.parse(reference.run('JSON.stringify(stateConfigs.information)')), particleColor: '#abcdef', backgroundColor: '#123456' });
 }, 6, [16, 100, 250, 300, 400, 500]);
-console.log(`PASS: exact draw parity with reference ${REFERENCE} across ${trace.length} phases (${SHAPES.length} shapes, axes, attenuation, counts, recycling, colors, transitions)`);
+console.log(`PASS: exact draw parity with reference ${REFERENCE} across ${trace.length} phases (${UNCHANGED_SHAPES.length} unchanged shapes, axes, attenuation, counts, recycling, colors, transitions)`);
+
+// ---- Redesigned formations ------------------------------------------------------------------------
+const frameOf = (app, steps = 1) => {
+  for (let i = 0; i < steps - 1; i++) app.step();
+  app.capture.start(); app.step();
+  return app.capture.stop();
+};
+const stats = (points) => {
+  let n = points.length / 2, mx = 0, my = 0;
+  for (let i = 0; i < points.length; i += 2) { mx += points[i]; my += points[i + 1]; }
+  mx /= n; my /= n;
+  let cxx = 0, cyy = 0, cxy = 0;
+  for (let i = 0; i < points.length; i += 2) {
+    const dx = points[i] - mx, dy = points[i + 1] - my;
+    cxx += dx * dx; cyy += dy * dy; cxy += dx * dy;
+  }
+  cxx /= n; cyy /= n; cxy /= n;
+  return { n, mx, my, rms: Math.sqrt(cxx + cyy), ratio: Math.sqrt(cxx / cyy), angle: 0.5 * Math.atan2(2 * cxy, cxx - cyy) };
+};
+const percentile = (values, fraction) => [...values].sort((a, b) => a - b)[Math.floor(values.length * fraction)];
+{
+  // Circle: a round ring with an empty middle, ambient particles included.
+  let ringMedian = 0;
+  for (const ambientParticles of [0, 0.34]) {
+    const app = bootRuntime();
+    app.run(`bg.update({ shape: "circle", ambientParticles: ${ambientParticles} });`);
+    for (let i = 0; i < 400; i++) app.step();
+    const points = frameOf(app);
+    const ring = [];
+    for (let i = 0; i < points.length; i += 2) ring.push(Math.hypot(points[i] - 640, points[i + 1] - 396));
+    // Measured with ambient particles off, so the halo does not shift the reference radius.
+    const median = ambientParticles === 0 ? (ringMedian = percentile(ring, 0.5)) : ringMedian;
+    const inside = ring.filter(r => r < median * 0.55).length / ring.length;
+    assert(median > 150 && median < 400, `ring radius ${median.toFixed(0)}px should be a large circle`);
+    assert(inside < 0.005, `${(inside * 100).toFixed(2)}% of particles in the middle (ambient ${ambientParticles})`);
+    if (ambientParticles === 0) {
+      const { ratio, mx, my } = stats(points);
+      assert(Math.abs(ratio - 1) < 0.05, `ring must be round, x/y spread ratio ${ratio.toFixed(3)}`);
+      assert(Math.hypot(mx - 640, my - 396) < 10, 'ring must be centered');
+      assert(percentile(ring, 0.995) < median * 1.5, 'ring must stay compact');
+      assert(points.length / 2 > 9000, 'ring particles stay inside the viewport');
+    }
+  }
+  console.log('PASS: circle is a round ring with an empty center, with and without ambient particles');
+}
+{
+  // Swoop: a cloud that wanders, wheels and breathes instead of tracing a fixed curve.
+  const app = bootRuntime();
+  app.run('bg.update({ shape: "swoop", ambientParticles: 0, speed: 2 });');
+  for (let i = 0; i < 200; i++) app.step();
+  const samples = [];
+  for (let sample = 0; sample < 60; sample++) {
+    const points = frameOf(app, 20);
+    const inView = points.filter((v, i) => i % 2 === 0 ? v >= 0 && v <= 1280 : v >= 0 && v <= 720).length / points.length;
+    assert(inView > 0.9, 'the cloud stays mostly on screen');
+    samples.push(stats(points));
+  }
+  const range = key => Math.max(...samples.map(s => s[key])) - Math.min(...samples.map(s => s[key]));
+  const sizeRatio = Math.max(...samples.map(s => s.rms)) / Math.min(...samples.map(s => s.rms));
+  console.log(`      swoop measured: center x range ${range('mx').toFixed(0)}px, y range ${range('my').toFixed(0)}px, size ratio ${sizeRatio.toFixed(2)}, heading range ${range('angle').toFixed(2)} rad`);
+  assert(range('mx') > 120, 'cloud must travel back and forth horizontally');
+  assert(range('my') > 40, 'cloud must also drift vertically');
+  assert(sizeRatio > 1.25, 'cloud must expand and contract');
+  assert(range('angle') > 0.3, 'cloud must wheel, not keep one heading');
+  console.log('PASS: swoop wanders, wheels, and breathes while staying on screen');
+}
 
 // ---- Hot-path cost: caching must not regress ---------------------------------------------------
 {
