@@ -7,16 +7,37 @@
   <style>
     :root {
       color-scheme: light;
-      --ink: oklch(22% 0.01 245);
-      --muted: oklch(49% 0.012 245);
-      --line: oklch(86% 0.008 245);
-      --panel: oklch(97% 0.004 245);
-      --paper: #FFFFFF;
-      --stage: #FFFFFF;
-      --accent: oklch(45% 0.12 212);
-      --state-transition-duration: 200ms;
-      --state-transition-ease: cubic-bezier(0.65, 0, 0.35, 1);
+      --surface: #F6F7F8;
+      --field: #FFFFFF;
+      --field-hover: #EDF0F2;
+      --ink: #16191C;
+      --muted: #59616A;
+      --line: #D3D9DE;
+      --accent: #0B6E7F;
+      --accent-ink: #FFFFFF;
+      --accent-soft: #DCEFF2;
+      --danger: #B3261E;
+      --chip: rgba(255, 255, 255, 0.92);
+      --shadow: 0 6px 20px rgba(22, 25, 28, 0.1);
+      --dur: 200ms;
+      --ease: cubic-bezier(0.65, 0, 0.35, 1);
       font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+    }
+
+    .app[data-theme="dark"] {
+      color-scheme: dark;
+      --surface: #14171A;
+      --field: #1D2125;
+      --field-hover: #292E34;
+      --ink: #E9ECEF;
+      --muted: #A3ABB3;
+      --line: #343B42;
+      --accent: #5CC4D6;
+      --accent-ink: #06222A;
+      --accent-soft: #123740;
+      --danger: #FF8F86;
+      --chip: rgba(29, 33, 37, 0.92);
+      --shadow: 0 6px 20px rgba(0, 0, 0, 0.45);
     }
 
     * { box-sizing: border-box; }
@@ -24,64 +45,41 @@
     body {
       margin: 0;
       min-height: 100vh;
-      background: var(--paper);
-      color: var(--ink);
+      background: #FFFFFF;
       overflow: hidden;
     }
 
     .app {
       display: grid;
-      grid-template-columns: minmax(0, 1fr) 360px;
+      grid-template-columns: minmax(0, 1fr) 340px;
       min-height: 100vh;
+      background: var(--surface);
+      color: var(--ink);
+      font-size: 13px;
     }
 
-    .app[data-theme="dark"] {
-      color-scheme: dark;
-      --ink: oklch(91% 0.008 245);
-      --muted: oklch(68% 0.012 245);
-      --line: oklch(28% 0.012 245);
-      --panel: oklch(18% 0.01 245);
-      --paper: #000000;
-      --stage: #000000;
-      --accent: oklch(72% 0.11 200);
+    .app.is-panel-hidden { grid-template-columns: minmax(0, 1fr) 0; }
+
+    :focus-visible {
+      outline: 2px solid var(--accent);
+      outline-offset: 2px;
     }
 
-    .app.is-panel-hidden {
-      grid-template-columns: minmax(0, 1fr) 0;
-    }
-
+    /* Stage */
     .stage {
       position: relative;
       min-width: 0;
-      background: var(--stage);
-    }
-
-    canvas {
-      display: block;
-      width: 100%;
       height: 100vh;
+      overflow: hidden;
+      /* The runtime places its canvas at z-index -1; isolate so it stays above the stage background. */
+      isolation: isolate;
+      background: var(--field);
       cursor: crosshair;
-    }
-
-    .hud {
-      position: absolute;
-      left: 70px;
-      top: 18px;
-      display: flex;
-      gap: 8px;
-      align-items: center;
-      padding: 8px 10px;
-      border: 1px solid var(--line);
-      border-radius: 8px;
-      background: color-mix(in oklch, var(--paper), transparent 12%);
-      backdrop-filter: blur(8px);
-      font-size: 12px;
-      color: var(--muted);
     }
 
     .brand-logo {
       position: absolute;
-      left: 22px;
+      left: 20px;
       top: 18px;
       z-index: 4;
       width: 34px;
@@ -89,27 +87,76 @@
       pointer-events: none;
     }
 
-    .stage-actions {
+    .hud {
       position: absolute;
-      right: 22px;
+      left: 66px;
       top: 18px;
       z-index: 4;
       display: flex;
       gap: 8px;
-    }
-
-    .stage-actions button {
-      width: auto;
+      align-items: center;
       min-height: 34px;
       padding: 0 12px;
-      border-color: color-mix(in oklch, var(--line), var(--ink) 8%);
-      background: color-mix(in oklch, var(--paper), transparent 10%);
+      border: 1px solid var(--line);
+      border-radius: 9px;
+      background: var(--chip);
       backdrop-filter: blur(8px);
-      box-shadow: 0 10px 28px color-mix(in oklch, var(--ink), transparent 92%);
+      color: var(--muted);
       font-size: 12px;
-      color: var(--ink);
+      font-variant-numeric: tabular-nums;
     }
 
+    .dot {
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      background: var(--accent);
+    }
+
+    .stage-actions {
+      position: absolute;
+      right: 16px;
+      top: 16px;
+      z-index: 4;
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: flex-end;
+      gap: 8px;
+      max-width: calc(100% - 32px);
+    }
+
+    .segmented, .chip {
+      display: inline-flex;
+      gap: 2px;
+      padding: 2px;
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      background: var(--chip);
+      backdrop-filter: blur(8px);
+      box-shadow: var(--shadow);
+    }
+
+    .segmented button, .chip button {
+      min-height: 30px;
+      padding: 0 13px;
+      border: 0;
+      border-radius: 8px;
+      background: transparent;
+      color: var(--ink);
+      font: inherit;
+      font-weight: 560;
+      cursor: pointer;
+    }
+
+    .segmented button:hover, .chip button:hover { background: var(--field-hover); }
+
+    .segmented button[aria-pressed="true"],
+    .chip button.is-on {
+      background: var(--accent);
+      color: var(--accent-ink);
+    }
+
+    /* Interface overlay preview */
     .interface-overlay {
       position: absolute;
       left: 50%;
@@ -119,14 +166,12 @@
       transform: translate(-50%, -50%);
       opacity: 0;
       pointer-events: none;
-      filter: drop-shadow(0 18px 44px color-mix(in oklch, var(--ink), transparent 88%));
+      filter: drop-shadow(0 18px 44px rgba(22, 25, 28, 0.12));
       will-change: opacity;
-      transition: opacity var(--state-transition-duration) var(--state-transition-ease);
+      transition: opacity var(--dur) var(--ease);
     }
 
-    .interface-overlay.is-visible {
-      opacity: 1;
-    }
+    .interface-overlay.is-visible { opacity: 1; }
 
     .ai-response-layer {
       position: absolute;
@@ -135,7 +180,7 @@
       pointer-events: none;
       opacity: 0;
       will-change: opacity;
-      transition: opacity var(--state-transition-duration) var(--state-transition-ease);
+      transition: opacity var(--dur) var(--ease);
     }
 
     .ai-response-main {
@@ -157,28 +202,16 @@
       transform: translateX(-50%);
     }
 
-    .app.is-ai-response .interface-overlay {
-      opacity: 0;
-    }
+    .app.is-ai-response .interface-overlay { opacity: 0; }
+    .app.is-ai-response .ai-response-layer.is-visible { opacity: 1; }
 
-    .app.is-ai-response .ai-response-layer.is-visible {
-      opacity: 1;
-    }
-
-    .dot {
-      width: 7px;
-      height: 7px;
-      border-radius: 50%;
-      background: var(--accent);
-      box-shadow: 0 0 0 4px color-mix(in oklch, var(--accent), transparent 82%);
-    }
-
+    /* Settings panel */
     aside {
       height: 100vh;
       overflow: auto;
       border-left: 1px solid var(--line);
-      background: var(--panel);
-      padding: 18px;
+      background: var(--surface);
+      padding: 18px 18px 28px;
       transition: opacity 180ms ease-out, transform 180ms ease-out;
     }
 
@@ -190,168 +223,197 @@
     }
 
     h1 {
-      margin: 0 0 4px;
-      font-size: 18px;
-      line-height: 1.2;
-      letter-spacing: 0;
+      margin: 0;
+      font-size: 17px;
       font-weight: 650;
+      line-height: 1.2;
     }
 
-    .sub {
-      margin: 0 0 18px;
+    .context {
+      margin: 6px 0 0;
       color: var(--muted);
-      font-size: 13px;
-      line-height: 1.45;
+      font-size: 12px;
     }
 
-    .group {
-      padding: 14px 0 16px;
+    section.group {
+      margin-top: 18px;
+      padding-top: 16px;
       border-top: 1px solid var(--line);
     }
 
-    .group-title {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      margin-bottom: 12px;
-      font-size: 12px;
-      font-weight: 700;
-      text-transform: uppercase;
-      letter-spacing: .08em;
-      color: oklch(38% 0.012 245);
-    }
-
-    label {
-      display: grid;
-      grid-template-columns: 1fr auto;
-      gap: 10px;
-      align-items: center;
-      margin: 11px 0;
+    h2 {
+      margin: 0 0 10px;
       font-size: 13px;
-      color: var(--ink);
+      font-weight: 650;
     }
 
-    .value {
-      min-width: 54px;
-      text-align: right;
+    .hint {
+      margin: 8px 0 0;
       color: var(--muted);
-      font-variant-numeric: tabular-nums;
       font-size: 12px;
+      line-height: 1.4;
     }
 
-    input[type="range"] {
-      grid-column: 1 / -1;
-      width: 100%;
-      accent-color: var(--accent);
-    }
-
-    input[type="color"] {
-      inline-size: 34px;
-      block-size: 28px;
-      padding: 0;
-      border: 1px solid var(--line);
-      border-radius: 6px;
-      background: transparent;
-    }
-
-    select, button, textarea {
-      width: 100%;
-      border: 1px solid var(--line);
-      border-radius: 7px;
-      background: oklch(99% 0.004 245);
-      color: var(--ink);
-      font: inherit;
-    }
-
-    select, button {
-      min-height: 34px;
-      padding: 0 10px;
-    }
-
-    button {
-      display: inline-flex;
-      align-items: center;
-      justify-content: center;
-      gap: 7px;
-      font-weight: 620;
-      cursor: pointer;
-      transition: background 160ms ease-out, border-color 160ms ease-out, transform 160ms ease-out;
-    }
-
-    button:hover { background: oklch(96% 0.007 245); }
-    button:active { transform: translateY(1px); }
-    button.primary {
-      border-color: color-mix(in oklch, var(--accent), black 12%);
-      background: var(--accent);
-      color: oklch(99% 0.004 245);
-    }
-    button.primary:hover { background: color-mix(in oklch, var(--accent), black 8%); }
-
-    .actions {
-      display: grid;
-      grid-template-columns: 1fr 1fr;
-      gap: 8px;
-      margin-top: 12px;
-    }
-
-    .actions.single {
-      grid-template-columns: 1fr;
-    }
-
-    textarea {
-      min-height: 190px;
-      resize: vertical;
-      padding: 10px;
-      font: 11px/1.45 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-      color: oklch(29% 0.01 245);
-    }
-
-    .preset-row {
-      display: grid;
-      grid-template-columns: repeat(4, 1fr);
-      gap: 8px;
-    }
-
-    .preset-row button { font-size: 12px; }
-
-    .preset-row button.is-active {
-      border-color: color-mix(in oklch, var(--accent), black 10%);
-      background: color-mix(in oklch, var(--accent), white 84%);
-      color: color-mix(in oklch, var(--accent), black 28%);
-    }
-
-    .app[data-theme="dark"] .preset-row button.is-active {
-      background: color-mix(in oklch, var(--accent), black 72%);
-      color: var(--ink);
-    }
-
-    .transition-control {
+    .row {
       display: flex;
       align-items: center;
       justify-content: space-between;
       gap: 12px;
-      margin-top: 12px;
-      color: var(--ink);
-      font-size: 13px;
+      margin: 8px 0;
     }
 
-    .transition-control input {
-      width: 92px;
-      min-height: 34px;
-      padding: 0 8px;
+    .field {
+      display: grid;
+      grid-template-columns: 1fr auto;
+      align-items: center;
+      column-gap: 8px;
+      margin: 12px 0 0;
+    }
+
+    .field output {
+      color: var(--muted);
+      font-size: 12px;
+      font-variant-numeric: tabular-nums;
+    }
+
+    .field input[type="range"] { grid-column: 1 / -1; }
+
+    select, input[type="number"], textarea {
       border: 1px solid var(--line);
-      border-radius: 7px;
-      background: oklch(99% 0.004 245);
+      border-radius: 8px;
+      background: var(--field);
       color: var(--ink);
       font: inherit;
-      text-align: right;
+    }
+
+    select, input[type="number"] {
+      min-height: 32px;
+      padding: 0 10px;
+    }
+
+    select { min-width: 148px; }
+    input[type="number"] { width: 92px; text-align: right; }
+
+    input[type="color"] {
+      inline-size: 40px;
+      block-size: 30px;
+      padding: 2px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: var(--field);
+      cursor: pointer;
+    }
+
+    input[type="range"] {
+      -webkit-appearance: none;
+      appearance: none;
+      width: 100%;
+      height: 22px;
+      margin: 0;
+      background: transparent;
+    }
+
+    input[type="range"]::-webkit-slider-runnable-track {
+      height: 4px;
+      border-radius: 2px;
+      background: var(--line);
+    }
+
+    input[type="range"]::-moz-range-track {
+      height: 4px;
+      border-radius: 2px;
+      background: var(--line);
+    }
+
+    input[type="range"]::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      width: 14px;
+      height: 14px;
+      margin-top: -5px;
+      border: 2px solid var(--field);
+      border-radius: 50%;
+      background: var(--accent);
+      box-shadow: 0 0 0 1px var(--accent);
+    }
+
+    input[type="range"]::-moz-range-thumb {
+      width: 10px;
+      height: 10px;
+      border: 2px solid var(--field);
+      border-radius: 50%;
+      background: var(--accent);
+      box-shadow: 0 0 0 1px var(--accent);
+    }
+
+    .btn {
+      min-height: 32px;
+      padding: 0 14px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: var(--field);
+      color: var(--ink);
+      font: inherit;
+      font-weight: 560;
+      cursor: pointer;
+    }
+
+    .btn:hover { background: var(--field-hover); }
+    .btn:active { transform: translateY(1px); }
+
+    .btn.primary {
+      border-color: var(--accent);
+      background: var(--accent);
+      color: var(--accent-ink);
+    }
+
+    .btn.primary:hover { filter: brightness(1.08); }
+
+    .actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-top: 10px;
+    }
+
+    textarea {
+      display: block;
+      width: 100%;
+      min-height: 170px;
+      resize: vertical;
+      padding: 10px;
+      font: 11px/1.5 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    }
+
+    .link-field {
+      width: 100%;
+      margin-top: 10px;
+      min-height: 32px;
+      padding: 0 10px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: var(--field);
+      color: var(--ink);
+      font: 11px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    }
+
+    .status {
+      min-height: 18px;
+      margin: 10px 0 0;
+      color: var(--muted);
+      font-size: 12px;
+    }
+
+    .status.is-error { color: var(--danger); }
+
+    @media (prefers-reduced-motion: reduce) {
+      * { transition-duration: 0.01ms !important; }
     }
 
     @media (max-width: 900px) {
       body { overflow: auto; }
       .app { grid-template-columns: 1fr; }
       .app.is-panel-hidden { grid-template-columns: 1fr; }
-      canvas { height: 58vh; }
+      .stage { height: 58vh; }
       .interface-overlay { width: min(88vw, 560px); }
       .ai-response-main { width: min(88vw, 656px); max-height: calc(58vh - 100px); }
       .ai-response-footer { bottom: 16px; width: min(calc(100% - 32px), 672px); }
@@ -361,62 +423,48 @@
         border-left: 0;
         border-top: 1px solid var(--line);
       }
-      .app.is-panel-hidden aside {
-        display: none;
-      }
+      .app.is-panel-hidden aside { display: none; }
     }
+
     @media (max-width: 480px) {
       .hud { display: none; }
+      .stage-actions { top: 60px; }
     }
   </style>
 </head>
 <body>
   <main class="app" id="app" data-theme="light">
     <section class="stage" aria-label="Effect preview">
-      <canvas id="murmuration"></canvas>
+      <div id="murmuration" aria-hidden="true"></div>
       <img class="brand-logo" src="assets/animated-logo.svg" alt="Animated brand logo">
       <img class="interface-overlay is-visible" id="interfaceOverlay" src="assets/nsiq-overlay-light.svg" alt="Interface overlay preview">
       <div class="ai-response-layer" id="aiResponseLayer" aria-hidden="true">
         <img class="ai-response-main" src="assets/ai-response-main.svg" alt="">
         <img class="ai-response-footer" src="assets/ai-response-footer.svg" alt="">
       </div>
-      <div class="hud"><span class="dot"></span><span id="readout">16000 particles</span></div>
+      <div class="hud"><span class="dot"></span><span id="readout">16,000 particles</span></div>
       <div class="stage-actions">
-        <button id="responseToggle" type="button" aria-pressed="false">Chat</button>
-        <button id="themeToggle" type="button" aria-pressed="false">Dark</button>
-        <button id="overlayToggle" class="is-active" type="button" aria-pressed="true">Overlay</button>
-        <button id="panelToggle" type="button" aria-controls="settingsPanel" aria-expanded="true">Hide panel</button>
+        <div class="segmented" role="group" aria-label="Screen">
+          <button id="homeBtn" type="button" aria-pressed="true">Home</button>
+          <button id="chatBtn" type="button" aria-pressed="false">Chat</button>
+        </div>
+        <div class="segmented" role="group" aria-label="Theme">
+          <button id="lightBtn" type="button" aria-pressed="true">Light</button>
+          <button id="darkBtn" type="button" aria-pressed="false">Dark</button>
+        </div>
+        <div class="chip"><button id="overlayToggle" class="is-on" type="button" aria-pressed="true">Overlay</button></div>
+        <div class="chip"><button id="panelToggle" type="button" aria-controls="settingsPanel" aria-expanded="true">Hide panel</button></div>
       </div>
     </section>
+
     <aside id="settingsPanel">
       <h1>Murmuration Lab</h1>
-      <p class="sub">An exportable particle background for web interfaces. Tune the motion, silhouette, axis, color, and density, then copy the generated Canvas module.</p>
+      <p class="context" id="editingContext">Editing Home, light theme</p>
 
-      <div class="group">
-        <div class="group-title">Presets</div>
-        <div class="preset-row">
-          <button data-preset="paper">Paper</button>
-          <button data-preset="night">Night</button>
-          <button data-preset="warm">Warm</button>
-        </div>
-        <label class="transition-control" for="transitionDuration">
-          Transition duration
-          <input id="transitionDuration" type="number" min="0" max="5000" step="50" value="200" inputmode="numeric" aria-label="Transition duration in milliseconds">
-        </label>
-      </div>
-
-      <div class="group" id="controls"></div>
-
-      <div class="group">
-        <div class="group-title">Composition</div>
-        <label>Axis
-          <select id="axis">
-            <option value="horizontal">Horizontal</option>
-            <option value="vertical">Vertical</option>
-            <option value="diagonal">Diagonal</option>
-          </select>
-        </label>
-        <label>Shape
+      <section class="group">
+        <h2>Formation</h2>
+        <div class="row">
+          <label for="shape">Shape</label>
           <select id="shape">
             <option value="ridge">Ridge</option>
             <option value="wave">Wave</option>
@@ -429,234 +477,166 @@
             <option value="swoop">Swoop</option>
             <option value="split-flock">Split flock</option>
           </select>
-        </label>
-      </div>
+        </div>
+        <div class="row">
+          <label for="axis">Axis</label>
+          <select id="axis">
+            <option value="horizontal">Horizontal</option>
+            <option value="vertical">Vertical</option>
+            <option value="diagonal">Diagonal</option>
+          </select>
+        </div>
+        <div id="formationControls"></div>
+      </section>
 
-      <div class="group">
-        <div class="group-title">Colors</div>
-        <label>Particles <input type="color" id="particleColor" value="#C2C2C2"></label>
-        <label>Background <input type="color" id="backgroundColor" value="#FFFFFF"></label>
-      </div>
+      <section class="group">
+        <h2>Motion</h2>
+        <div id="motionControls"></div>
+      </section>
 
-      <div class="group">
-        <div class="group-title">Export</div>
-        <textarea id="exportCode" spellcheck="false"></textarea>
+      <section class="group">
+        <h2>Look</h2>
+        <div id="lookControls"></div>
+      </section>
+
+      <section class="group">
+        <h2>Colors</h2>
+        <div class="row"><label for="particleColor">Particles</label><input type="color" id="particleColor" value="#C2C2C2"></div>
+        <div class="row"><label for="backgroundColor">Background</label><input type="color" id="backgroundColor" value="#FFFFFF"></div>
+        <p class="hint" id="colorHint">Saved for Home in the light theme.</p>
+      </section>
+
+      <section class="group">
+        <h2>Transition</h2>
+        <div class="row">
+          <label for="transitionDuration">Duration (ms)</label>
+          <input id="transitionDuration" type="number" min="0" max="5000" step="50" value="200" inputmode="numeric">
+        </div>
+        <p class="hint">Applies to every screen and is saved with the config.</p>
+      </section>
+
+      <section class="group">
+        <h2>Handoff</h2>
+        <textarea id="exportCode" spellcheck="false" aria-label="Integration snippet" readonly></textarea>
         <div class="actions">
-          <button id="copyBtn" class="primary">Copy</button>
-          <button id="downloadBtn">Download JS</button>
+          <button id="copyBtn" class="btn primary" type="button">Copy</button>
+          <button id="downloadBtn" class="btn" type="button">Download JS</button>
+          <button id="copyPreviewBtn" class="btn" type="button">Copy preview link</button>
         </div>
-        <div class="actions single">
-          <button id="copyPreviewBtn">Copy preview link</button>
-        </div>
-      </div>
+        <input id="linkField" class="link-field" type="text" readonly hidden aria-label="Preview link">
+        <p class="status" id="status" role="status" aria-live="polite"></p>
+      </section>
     </aside>
   </main>
 
+  <!-- Filled in by tools/build-artifact.cjs for the hosted page; both stay empty when run locally. -->
+  <script type="application/json" id="savedConfig"></script>
+  <script type="text/plain" id="pageTemplate"></script>
   <script src="./particle-renderer.js"></script>
+  <script src="./murmuration-runtime.js"></script>
+  <script src="./murmuration-export.js"></script>
   <script>
-    const renderer = createParticleRenderer(document.getElementById("murmuration"), new URLSearchParams(location.search).get("renderer") || 'webgl2');
-    const canvas = renderer.canvas;
-    const ctx = renderer.context;
-    const readout = document.getElementById("readout");
-    const exportCode = document.getElementById("exportCode");
-    const interfaceOverlay = document.getElementById("interfaceOverlay");
-    const aiResponseLayer = document.getElementById("aiResponseLayer");
-    const overlayToggle = document.getElementById("overlayToggle");
-    const app = document.getElementById("app");
-    const panelToggle = document.getElementById("panelToggle");
-    const themeToggle = document.getElementById("themeToggle");
-    const copyPreviewBtn = document.getElementById("copyPreviewBtn");
-    const responseToggle = document.getElementById("responseToggle");
-    const transitionDurationInput = document.getElementById("transitionDuration");
+    const el = id => document.getElementById(id);
+    const stage = el("murmuration");
+    const app = el("app");
+    const readout = el("readout");
+    const exportCode = el("exportCode");
+    const status = el("status");
+    const interfaceOverlay = el("interfaceOverlay");
+    const aiResponseLayer = el("aiResponseLayer");
+    const overlayToggle = el("overlayToggle");
+    const panelToggle = el("panelToggle");
+    const homeBtn = el("homeBtn");
+    const chatBtn = el("chatBtn");
+    const lightBtn = el("lightBtn");
+    const darkBtn = el("darkBtn");
+    const copyBtn = el("copyBtn");
+    const downloadBtn = el("downloadBtn");
+    const copyPreviewBtn = el("copyPreviewBtn");
+    const transitionInput = el("transitionDuration");
+    const linkField = el("linkField");
 
-    const settings = {
-      theme: "light",
-      overlay: true,
-      particles: 16000,
-      speed: 0.55,
-      turbulence: 0.42,
-      rotation: 0,
-      axis: "horizontal",
-      shape: "ridge",
-      coverage: 0.72,
-      formationScale: 1.18,
-      ambientParticles: 0.34,
-      spread: 0.88,
-      scatter: 0.34,
-      coordination: 0.8,
-      gathering: 0.55,
-      dispersal: 0.38,
-      reformation: 0.64,
-      responsiveness: 0.35,
-      calmness: 0.82,
-      dataStructure: 0.32,
-      patternSubtlety: 0.74,
-      negativeSpace: 0.62,
-      edgeSoftness: 0.8,
-      depth: 0.55,
-      grain: 0.48,
-      crest: 0.62,
-      arch: 0.54,
-      density: 0.72,
-      particleSize: 0.72,
-      fade: 0.22,
-      centerAttenuation: 0,
-      particleColor: "#C2C2C2",
-      backgroundColor: "#FFFFFF"
-    };
-
+    // Only these parameters are part of a saved state, the exported config and the share link.
+    // Everything else the runtime supports keeps its built-in default.
     const controlGroups = [
-      {
-        title: "Core",
-        controls: [
-          ["particles", "Particles", 2000, 32000, 1000],
-          ["speed", "Speed", 0, 2, 0.01],
-          ["rotation", "Rotation", -35, 35, 1],
-          ["coverage", "Coverage", 0, 1, 0.01],
-          ["formationScale", "Formation scale", 0.7, 1.8, 0.01],
-          ["ambientParticles", "Ambient particles", 0, 0.75, 0.01],
-          ["spread", "Spread", 0.35, 1.4, 0.01],
-          ["scatter", "Scatter", 0, 1.2, 0.01]
-        ]
-      },
-      {
-        title: "Swarm behavior",
-        controls: [
-          ["coordination", "Coordination", 0, 1, 0.01],
-          ["gathering", "Gathering", 0, 1, 0.01],
-          ["dispersal", "Dispersal", 0, 1, 0.01],
-          ["reformation", "Reformation", 0, 1, 0.01],
-          ["responsiveness", "Responsiveness", 0, 1, 0.01],
-          ["calmness", "Calmness", 0, 1, 0.01]
-        ]
-      },
-      {
-        title: "Pattern",
-        controls: [
-          ["turbulence", "Turbulence", 0, 1.4, 0.01],
-          ["dataStructure", "Data structure", 0, 1, 0.01],
-          ["patternSubtlety", "Pattern subtlety", 0, 1, 0.01],
-          ["negativeSpace", "Negative space", 0, 1, 0.01],
-          ["edgeSoftness", "Edge softness", 0, 1, 0.01],
-          ["crest", "Crest", 0.1, 1.1, 0.01],
-          ["arch", "Opening", 0.1, 1.1, 0.01],
-          ["density", "Density", 0.1, 1, 0.01]
-        ]
-      },
-      {
-        title: "Visual",
-        controls: [
-          ["particleSize", "Particle size", 0.35, 1.8, 0.01],
-          ["fade", "Trail", 0.04, 0.5, 0.01],
-          ["centerAttenuation", "Center attenuation", 0, 1, 0.01],
-          ["depth", "Depth", 0, 1, 0.01],
-          ["grain", "Grain", 0, 1, 0.01]
-        ]
-      }
+      { target: "formationControls", controls: [
+        ["formationScale", "Scale", 0.7, 1.8, 0.01],
+        ["spread", "Spread", 0.35, 1.4, 0.01],
+        ["scatter", "Scatter", 0, 1.2, 0.01],
+        ["crest", "Crest", 0.1, 1.1, 0.01],
+        ["rotation", "Rotation", -35, 35, 1]
+      ] },
+      { target: "motionControls", controls: [
+        ["speed", "Speed", 0, 2, 0.01],
+        ["particles", "Particles", 2000, 32000, 1000]
+      ] },
+      { target: "lookControls", controls: [
+        ["particleSize", "Particle size", 0.35, 1.8, 0.01],
+        ["fade", "Trail", 0.04, 0.5, 0.01],
+        ["centerAttenuation", "Center attenuation", 0, 1, 0.01],
+        ["depth", "Depth", 0, 1, 0.01],
+        ["grain", "Grain", 0, 1, 0.01]
+      ] }
     ];
     const controls = controlGroups.flatMap(group => group.controls);
-
-    const target = { x: 0, y: 0 };
-    let particleCount = 0;
-    let particleX = new Float32Array(0);
-    let particleY = new Float32Array(0);
-    let velocityX = new Float32Array(0);
-    let velocityY = new Float32Array(0);
-    let particleSeed = new Float32Array(0);
-    // Float64 preserves the exact pseudo-random values used by the simulation.
-    const staticOffsets = [307, 719, 611, 101, 202, 42, 9, 33];
-    let staticRandom = new Float64Array(0);
-    let flickerCache = new Float64Array(0);
-    let flickerEpoch = NaN;
-    let motionRandom = new Float64Array(0);
-    let particleField = new Uint8Array(0);
-    let w = 1;
-    let h = 1;
-    let dpr = 1;
-    let centerX = 0.5;
-    let centerY = 0.55;
-    let minDimension = 1;
-    let rotationCos = 1;
-    let rotationSin = 0;
-    let dispersalPulse = 0;
-    let shapeSubtlety = 1;
-    const diagonalCos = Math.SQRT1_2;
-    let t = 0;
-    let animationId = 0;
-    let transitionFrame = 0;
-    let previewState = "information";
-    let overlayVisible = true;
-    let transitionDuration = 200;
-    const stateConfigs = {
-      information: null,
-      response: null
+    const SHAPES = ["ridge", "wave", "arch", "vortex", "veil", "spiral", "circle", "flock", "swoop", "split-flock"];
+    const AXES = ["horizontal", "vertical", "diagonal"];
+    const THEMES = ["light", "dark"];
+    const COLOR_KEYS = ["particleColor", "backgroundColor"];
+    const THEME_COLORS = {
+      light: { particleColor: "#C2C2C2", backgroundColor: "#FFFFFF" },
+      dark: { particleColor: "#737373", backgroundColor: "#000000" }
     };
-    const reducedMotionQuery = matchMedia("(prefers-reduced-motion: reduce)");
+    const PUBLIC_KEYS = ["shape", "axis", ...controls.map(([key]) => key)];
+    // Names stay "information"/"response" internally so links created before this version still load.
+    const STATE_LABELS = { information: "Home", response: "Chat" };
+    const CHAT_DIFFERENCES = { formationScale: 1.35, spread: 1.15, scatter: 0.62, fade: 0.18, centerAttenuation: 0 };
 
-    const aiResponseDefaults = {
-      coverage: 0.9,
-      formationScale: 1.35,
-      ambientParticles: 0.48,
-      spread: 1.15,
-      scatter: 0.62,
-      coordination: 0.68,
-      gathering: 0.3,
-      dispersal: 0.72,
-      reformation: 0.58,
-      responsiveness: 0.48,
-      calmness: 0.62,
-      turbulence: 0.56,
-      negativeSpace: 0.32,
-      edgeSoftness: 0.72,
-      density: 0.62,
-      fade: 0.18,
-      centerAttenuation: 0
-    };
+    const clamp = (value, min, max) => Math.min(max, Math.max(min, value));
+    const isHex = value => typeof value === "string" && /^#[0-9a-f]{6}$/i.test(value);
 
-    function rand(seed) {
-      const x = Math.sin(seed * 127.1) * 43758.5453123;
-      return x - Math.floor(x);
-    }
-
-    function clamp(value, min, max) {
-      return Math.min(max, Math.max(min, value));
-    }
-
-    function smoothstep(min, max, value) {
-      const progress = clamp((value - min) / (max - min), 0, 1);
-      return progress * progress * (3 - 2 * progress);
-    }
-
-    function centerAttenuationAt(x) {
-      if (settings.centerAttenuation === 0) return 1;
-      const horizontalPosition = x / w;
-      if (horizontalPosition <= 0.15 || horizontalPosition >= 0.85) return 1;
-      if (horizontalPosition >= 0.25 && horizontalPosition <= 0.75) return 1 - settings.centerAttenuation * 0.95;
-      const centerBand = horizontalPosition < 0.25
-        ? smoothstep(0.15, 0.25, horizontalPosition)
-        : 1 - smoothstep(0.75, 0.85, horizontalPosition);
-      return 1 - centerBand * settings.centerAttenuation * 0.95;
-    }
-
-    function stateSnapshot(source = settings) {
-      const { theme, overlay, ...state } = source;
-      return state;
-    }
-
-    function sharedPreviewState() {
+    function makeState(overrides = {}) {
+      const source = { ...MURMURATION_DEFAULTS, ...overrides };
       return {
-        version: 2,
-        activeState: previewState,
-        theme: settings.theme,
-        overlay: overlayVisible,
-        transitionDuration,
-        states: stateConfigs
+        ...Object.fromEntries(PUBLIC_KEYS.map(key => [key, source[key]])),
+        colors: { light: { ...THEME_COLORS.light }, dark: { ...THEME_COLORS.dark } }
       };
     }
 
+    // Accepts anything decoded from a link and returns a complete, in-range state.
+    function sanitizeState(raw, base, legacyTheme) {
+      const next = { ...base, colors: { light: { ...base.colors.light }, dark: { ...base.colors.dark } } };
+      if (!raw || typeof raw !== "object") return next;
+      controls.forEach(([key, , min, max]) => {
+        if (typeof raw[key] === "number" && Number.isFinite(raw[key])) next[key] = clamp(raw[key], min, max);
+      });
+      if (SHAPES.includes(raw.shape)) next.shape = raw.shape;
+      if (AXES.includes(raw.axis)) next.axis = raw.axis;
+      THEMES.forEach(name => COLOR_KEYS.forEach(key => {
+        if (isHex(raw.colors?.[name]?.[key])) next.colors[name][key] = raw.colors[name][key];
+      }));
+      // Links from before per-theme colors stored one flat pair, for whichever theme was active.
+      if (!raw.colors && legacyTheme) COLOR_KEYS.forEach(key => {
+        if (isHex(raw[key])) next.colors[legacyTheme][key] = raw[key];
+      });
+      return next;
+    }
+
+    let theme = "light";
+    let overlayVisible = true;
+    let transitionDuration = 200;
+    let activeState = "information";
+    const states = {
+      information: makeState(),
+      response: makeState(CHAT_DIFFERENCES)
+    };
+
+    function sharedPreviewState() {
+      return { version: 3, activeState, theme, overlay: overlayVisible, transitionDuration, states };
+    }
+
     function encodeSettings() {
-      const json = JSON.stringify(sharedPreviewState());
-      const bytes = new TextEncoder().encode(json);
+      const bytes = new TextEncoder().encode(JSON.stringify(sharedPreviewState()));
       let binary = "";
       bytes.forEach(byte => { binary += String.fromCharCode(byte); });
       return btoa(binary).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
@@ -665,8 +645,7 @@
     function decodeSettings(value) {
       const normalized = value.replace(/-/g, "+").replace(/_/g, "/");
       const padded = normalized + "=".repeat((4 - normalized.length % 4) % 4);
-      const binary = atob(padded);
-      const bytes = Uint8Array.from(binary, char => char.charCodeAt(0));
+      const bytes = Uint8Array.from(atob(padded), char => char.charCodeAt(0));
       return JSON.parse(new TextDecoder().decode(bytes));
     }
 
@@ -677,928 +656,305 @@
     }
 
     function updatePreviewUrl() {
-      const url = new URL(location.href);
-      url.searchParams.set("config", encodeSettings());
-      history.replaceState(null, "", url);
+      history.replaceState(null, "", getPreviewUrl());
     }
 
-    function applyThemePalette(target = settings) {
-      const isDark = settings.theme === "dark";
-      target.backgroundColor = isDark ? "#000000" : "#FFFFFF";
-      target.particleColor = isDark ? "#737373" : "#C2C2C2";
-      target.fade = isDark ? Math.min(target.fade, 0.2) : Math.max(target.fade, 0.22);
-    }
-
-    function applyStateConfig(nextState, applyTheme = false) {
-      const { overlay, ...state } = nextState;
-      Object.assign(settings, state, { theme: settings.theme });
-      if (applyTheme) applyThemePalette();
-    }
-
-    function applySharedConfig() {
-      const encoded = new URLSearchParams(location.search).get("config");
-      if (!encoded) return false;
-      try {
-        const shared = decodeSettings(encoded);
-        if (shared.version === 2 && shared.states?.information && shared.states?.response) {
-          settings.theme = shared.theme === "dark" ? "dark" : "light";
-          overlayVisible = typeof shared.overlay === "boolean"
-            ? shared.overlay
-            : Boolean(shared.states[shared.activeState === "response" ? "response" : "information"].overlay ?? settings.overlay);
-          settings.overlay = overlayVisible;
-          if (Number.isFinite(shared.transitionDuration)) {
-            transitionDuration = clamp(shared.transitionDuration, 0, 5000);
-          }
-          stateConfigs.information = { ...stateSnapshot(), ...shared.states.information };
-          stateConfigs.response = { ...stateSnapshot(), ...aiResponseDefaults, ...shared.states.response };
-          previewState = shared.activeState === "response" ? "response" : "information";
-          applyStateConfig(stateConfigs[previewState]);
-          return true;
-        }
-
-      // Support preview links created before state-specific sharing existed.
-      Object.keys(settings).forEach(key => {
-        if (Object.prototype.hasOwnProperty.call(shared, key)) settings[key] = shared[key];
-      });
+    // A malformed link never blocks the editor: anything unreadable falls back to the defaults.
+    function applyShared(shared) {
+      if (!shared || typeof shared !== "object") throw new Error("Not a config object");
+      if (shared.theme === "dark") theme = "dark";
       if (typeof shared.overlay === "boolean") overlayVisible = shared.overlay;
-      if (Number.isFinite(shared.transitionDuration)) {
+      if (typeof shared.transitionDuration === "number" && Number.isFinite(shared.transitionDuration)) {
         transitionDuration = clamp(shared.transitionDuration, 0, 5000);
       }
+      const legacyTheme = shared.version === 3 ? null : theme;
+      const source = shared.states && typeof shared.states === "object" ? shared.states : { information: shared };
+      Object.keys(states).forEach(name => {
+        states[name] = sanitizeState(source[name], states[name], legacyTheme);
+      });
+      if (Object.prototype.hasOwnProperty.call(states, shared.activeState)) activeState = shared.activeState;
+    }
+
+    // A link's ?config wins. Otherwise a hosted page opens with the config saved into it.
+    function loadSharedConfig() {
+      try {
+        const encoded = new URLSearchParams(location.search).get("config");
+        if (encoded) return applyShared(decodeSettings(encoded));
+        const saved = (el("savedConfig").textContent || "").trim();
+        if (saved) applyShared(JSON.parse(saved));
       } catch (error) {
         console.warn("Could not load shared murmuration config.", error);
       }
-      return false;
     }
 
-    function syncControlsFromSettings() {
-      app.dataset.theme = settings.theme;
-      app.style.setProperty("--state-transition-duration", `${transitionDuration}ms`);
-      interfaceOverlay.src = settings.theme === "dark" ? "assets/nsiq-overlay-dark.svg" : "assets/nsiq-overlay-light.svg";
+    // Hosted pages sit in a frame that drops the address bar's query string, so a link with ?config
+    // cannot carry the settings. There the settings are saved into the page itself and the link
+    // is the page's own address.
+    const hostedUrl = () => document.querySelector('meta[name="published-url"]')?.content || "";
+    // The template travels inside a script element, so a closing script tag and an HTML comment opener are stored disguised.
+    const unescapeTemplate = text => text.replace(/<@\/script/g, "</script").replace(new RegExp("<@" + "!--", "g"), "<!" + "--");
+    const escapeTemplate = text => text.replace(/<\/script/g, "<@" + "/script").replace(new RegExp("<" + "!--", "g"), "<@" + "!--");
+    const hostedTemplate = () => unescapeTemplate(el("pageTemplate").textContent);
+    const SKELETON_HEAD = '<!doctype html><html><head><meta charset=utf8><meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover"><style>:root{color-scheme:light}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#fff;color:#000}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}</style></head><body>\n';
+    const SAVED_EMPTY = '<script type="application/json" id="savedConfig"></' + 'script>';
+    const TEMPLATE_EMPTY = '<script type="text/plain" id="pageTemplate"></' + 'script>';
+
+    function hostedDocument() {
+      const template = hostedTemplate();
+      const json = JSON.stringify(sharedPreviewState()).replace(/</g, "\\u003c");
+      const saved = '<script type="application/json" id="savedConfig">' + json + '</' + 'script>';
+      const holder = '<script type="text/plain" id="pageTemplate">' + escapeTemplate(template) + '</' + 'script>';
+      // Function replacers keep "$" in the template from being read as replacement patterns.
+      const page = template.replace(SAVED_EMPTY, () => saved).replace(TEMPLATE_EMPTY, () => holder);
+      return SKELETON_HEAD + page + "\n</body></html>";
+    }
+
+    async function savePreviewLink() {
+      let publisher = null;
+      try { publisher = window.claude && window.claude.use ? await window.claude.use("artifact") : null; } catch (error) { publisher = null; }
+      if (!publisher || !hostedUrl() || !hostedTemplate().trim()) return copyText(getPreviewUrl(), "Preview link", linkField);
+      // Copy first: publishing reloads the page, and a copy needs this click to still be in effect.
+      await copyText(hostedUrl(), "Preview link", linkField);
+      announce("Saving your settings into the link...");
+      try {
+        await publisher.publish(hostedDocument());
+      } catch (error) {
+        const code = error && error.code;
+        announce(code === "not_writer" || code === "not_granted"
+          ? "Only editors of this page can save settings into the link."
+          : "Could not save the settings into the link. Try again.", true);
+      }
+    }
+
+    function exportPayload() {
+      return { states: { home: states.information, chat: states.response }, transitionDuration, theme };
+    }
+
+    const refreshExport = () => { exportCode.value = buildMurmurationSnippet(exportPayload()); };
+    const exportedModule = () => buildMurmurationModule(exportPayload());
+    const commit = () => { refreshExport(); updatePreviewUrl(); };
+
+    let statusTimer = 0;
+    function announce(message, isError = false) {
+      status.textContent = message;
+      status.classList.toggle("is-error", isError);
+      clearTimeout(statusTimer);
+      statusTimer = setTimeout(() => {
+        status.textContent = "";
+        status.classList.toggle("is-error", false);
+      }, 2600);
+    }
+
+    // Clipboard access can be blocked inside an embedded frame, so fall back to a selection copy and,
+    // as a last resort, show the text in a field the person can copy by hand.
+    function legacyCopy(text) {
+      const area = document.createElement("textarea");
+      area.value = text;
+      area.setAttribute("readonly", "");
+      area.style.position = "fixed";
+      area.style.opacity = "0";
+      document.body.appendChild(area);
+      area.select();
+      let done = false;
+      try { done = document.execCommand("copy"); } catch (error) { done = false; }
+      area.remove();
+      return done;
+    }
+
+    async function copyText(text, label, field) {
+      if (field) { field.hidden = true; }
+      let done = false;
+      try {
+        await navigator.clipboard.writeText(text);
+        done = true;
+      } catch (error) {
+        done = legacyCopy(text);
+      }
+      if (done) {
+        announce(`${label} copied.`);
+        return;
+      }
+      if (field) {
+        field.value = text;
+        field.hidden = false;
+        field.focus();
+        field.select();
+      }
+      announce(`The browser blocked copying. Select the ${label.toLowerCase()} below and copy it.`, true);
+    }
+
+    async function saveModule() {
+      const source = exportedModule();
+      let saver = null;
+      try { saver = window.claude && window.claude.use ? await window.claude.use("downloads") : null; } catch (error) { saver = null; }
+      if (saver) {
+        // The published page cannot trigger a browser download; the platform asks the viewer instead,
+        // and only accepts certain extensions, so the file is saved as .txt to rename to .js.
+        try {
+          await saver.save({ filename: "murmuration-background.js.txt", data: source });
+          announce("Saved murmuration-background.js.txt. Rename it to murmuration-background.js.");
+        } catch (error) {
+          if (!error || error.code !== "declined") announce("Could not save the file. Use Copy for the snippet instead.", true);
+        }
+        return;
+      }
+      const blob = new Blob([source], { type: "text/javascript" });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = "murmuration-background.js";
+      link.click();
+      URL.revokeObjectURL(url);
+      announce("Downloaded murmuration-background.js.");
+    }
+
+    function controlMarkup(group) {
+      return group.controls.map(([key, label, min, max, step]) => `
+        <div class="field">
+          <label for="${key}">${label}</label>
+          <output id="${key}Value" for="${key}"></output>
+          <input type="range" id="${key}" min="${min}" max="${max}" step="${step}">
+        </div>`).join("");
+    }
+
+    function syncControls() {
+      const state = states[activeState];
+      const modeName = STATE_LABELS[activeState];
+      app.dataset.theme = theme;
+      app.style.setProperty("--dur", `${transitionDuration}ms`);
+      interfaceOverlay.src = theme === "dark" ? "assets/nsiq-overlay-dark.svg" : "assets/nsiq-overlay-light.svg";
       interfaceOverlay.classList.toggle("is-visible", overlayVisible);
       aiResponseLayer.classList.toggle("is-visible", overlayVisible);
       aiResponseLayer.setAttribute("aria-hidden", String(!overlayVisible));
-      overlayToggle.classList.toggle("is-active", overlayVisible);
+      overlayToggle.classList.toggle("is-on", overlayVisible);
       overlayToggle.setAttribute("aria-pressed", String(overlayVisible));
-      themeToggle.textContent = settings.theme === "dark" ? "Light" : "Dark";
-      themeToggle.setAttribute("aria-pressed", String(settings.theme === "dark"));
-      responseToggle.textContent = previewState === "response" ? "Home" : "Chat";
-      responseToggle.setAttribute("aria-pressed", String(previewState === "response"));
-      transitionDurationInput.value = transitionDuration;
-      document.getElementById("particleColor").value = settings.particleColor;
-      document.getElementById("backgroundColor").value = settings.backgroundColor;
-      document.getElementById("axis").value = settings.axis;
-      document.getElementById("shape").value = settings.shape;
+      homeBtn.setAttribute("aria-pressed", String(activeState === "information"));
+      chatBtn.setAttribute("aria-pressed", String(activeState === "response"));
+      lightBtn.setAttribute("aria-pressed", String(theme === "light"));
+      darkBtn.setAttribute("aria-pressed", String(theme === "dark"));
+      transitionInput.value = transitionDuration;
+      el("shape").value = state.shape;
+      el("axis").value = state.axis;
       controls.forEach(([key]) => {
-        document.getElementById(key).value = settings[key];
-        document.getElementById(`${key}Value`).textContent = settings[key];
+        el(key).value = state[key];
+        el(`${key}Value`).textContent = state[key];
       });
+      COLOR_KEYS.forEach(key => { el(key).value = state.colors[theme][key]; });
+      el("editingContext").textContent = `Editing ${modeName}, ${theme} theme`;
+      el("colorHint").textContent = `Saved for ${modeName} in the ${theme} theme.`;
     }
 
-    function saveActiveState() {
-      stateConfigs[previewState] = stateSnapshot();
-    }
-
-    function isConstrainedDevice() {
-      const cores = navigator.hardwareConcurrency || 8;
-      const memory = navigator.deviceMemory || 8;
-      return w < 768 || cores <= 4 || memory <= 4;
-    }
-
-    function effectiveParticleCount() {
-      return Math.min(settings.particles, isConstrainedDevice() ? 6000 : 10000);
-    }
-
-    function renderScale() {
-      return isConstrainedDevice() ? 0.75 : 1;
-    }
-
-    function resize() {
-      const box = canvas.getBoundingClientRect();
-      dpr = Math.min(window.devicePixelRatio || 1, renderScale());
-      w = Math.max(1, Math.floor(box.width));
-      h = Math.max(1, Math.floor(box.height));
-      centerX = w * 0.5;
-      centerY = h * 0.55;
-      minDimension = Math.min(w, h);
-      canvas.width = Math.floor(w * dpr);
-      canvas.height = Math.floor(h * dpr);
-      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-      syncParticleCount();
-      clearFrame();
-    }
-
-    function syncParticleCount() {
-      const count = effectiveParticleCount();
-      ensureParticleCapacity(count);
-      while (particleCount < count) {
-        resetParticle(particleCount, particleCount + 1);
-        particleCount += 1;
-      }
-      particleCount = count;
-      for (let i = 0; i < particleCount; i++) {
-        particleField[i] = rand(i + 78) < settings.ambientParticles ? 1 : 0;
-      }
-      readout.textContent = count === settings.particles
+    function updateReadout() {
+      const count = bg.activeParticles;
+      const requested = states[activeState].particles;
+      readout.textContent = count === requested
         ? `${count.toLocaleString("en-US")} particles`
-        : `${count.toLocaleString("en-US")} active / ${settings.particles.toLocaleString("en-US")}`;
+        : `${count.toLocaleString("en-US")} active / ${requested.toLocaleString("en-US")}`;
     }
 
-    function ensureParticleCapacity(count) {
-      if (particleX.length >= count) return;
-      const capacity = Math.max(count, Math.ceil(Math.max(1, particleX.length) * 1.5));
-      const nextX = new Float32Array(capacity);
-      const nextY = new Float32Array(capacity);
-      const nextVelocityX = new Float32Array(capacity);
-      const nextVelocityY = new Float32Array(capacity);
-      const nextSeed = new Float32Array(capacity);
-      const nextField = new Uint8Array(capacity);
-      nextX.set(particleX); nextY.set(particleY);
-      nextVelocityX.set(velocityX); nextVelocityY.set(velocityY);
-      nextSeed.set(particleSeed); nextField.set(particleField);
-      const nextRandom = new Float64Array(capacity * staticOffsets.length);
-      nextRandom.set(staticRandom);
-      staticRandom = nextRandom;
-      const nextFlicker = new Float64Array(capacity);
-      nextFlicker.set(flickerCache);
-      flickerCache = nextFlicker;
-      const nextMotion = new Float64Array(capacity * 6);
-      nextMotion.fill(NaN);
-      nextMotion.set(motionRandom);
-      motionRandom = nextMotion;
-      particleX = nextX; particleY = nextY;
-      velocityX = nextVelocityX; velocityY = nextVelocityY;
-      particleSeed = nextSeed; particleField = nextField;
+    // Each screen keeps its own settings and colors. Switching never rewrites either one: the runtime
+    // simply regroups the flock toward the saved destination.
+    function setActiveState(name) {
+      if (name === activeState) return;
+      activeState = name;
+      app.classList.toggle("is-ai-response", name === "response");
+      bg.setState(name, states[name]);
+      bg.transitionTo(name, transitionDuration);
+      syncControls();
+      updateReadout();
+      commit();
     }
 
-    function resetParticle(index, source = index + 1) {
-      const r = Math.sqrt(Math.random());
-      const a = Math.random() * Math.PI * 2;
-      const field = rand(index + 78) < settings.ambientParticles;
-      particleX[index] = field ? Math.random() * w : w * 0.5 + Math.cos(a) * r * w * 0.42;
-      particleY[index] = field ? Math.random() * h : h * 0.58 + Math.sin(a) * r * h * 0.28;
-      velocityX[index] = (Math.random() - 0.5) * 0.6;
-      velocityY[index] = (Math.random() - 0.5) * 0.6;
-      particleSeed[index] = source * 13.37 + Math.random() * 900;
-      flickerCache[index] = rand(particleSeed[index] + Math.floor(t * 0.002));
-      motionRandom[index * 6] = motionRandom[index * 6 + 2] = motionRandom[index * 6 + 4] = NaN;
-      for (let slot = 0; slot < staticOffsets.length; slot++) {
-        staticRandom[index * staticOffsets.length + slot] = rand(particleSeed[index] + staticOffsets[slot]);
-      }
-      particleField[index] = field ? 1 : 0;
+    // Light and dark palettes are stored separately per screen, so toggling the theme only chooses which
+    // pair is shown and edited.
+    function setTheme(next) {
+      if (next === theme) return;
+      theme = next;
+      bg.setState(activeState, states[activeState]);
+      bg.setTheme(theme);
+      syncControls();
+      commit();
     }
 
-    function updateFrameConstants() {
-      const angle = settings.rotation * Math.PI / 180;
-      rotationCos = Math.cos(angle);
-      rotationSin = Math.sin(angle);
-      dispersalPulse = settings.dispersal * (0.5 + 0.5 * Math.sin(t * 0.0014));
-      shapeSubtlety = 0.45 + settings.patternSubtlety * 0.75;
-    }
+    controlGroups.forEach(group => { el(group.target).innerHTML = controlMarkup(group); });
+    loadSharedConfig();
+    app.classList.toggle("is-ai-response", activeState === "response");
 
-    // Each channel keeps its own epoch because particles can switch roles or reset.
-    function cachedMotionRandom(index, slot, epoch, offset = 0) {
-      const base = index * 6 + slot * 2;
-      if (motionRandom[base] !== epoch) {
-        motionRandom[base] = epoch;
-        motionRandom[base + 1] = rand(particleSeed[index] + offset + epoch);
-      }
-      return motionRandom[base + 1];
-    }
+    // The editor owns the saved states. The runtime works on copies and is driven through its public
+    // API only (update, setState, setTheme, transitionTo, clear), exactly like an integrator.
+    const bg = createMurmurationRuntime(stage, {
+      states,
+      initialState: activeState,
+      transitionDuration,
+      theme,
+      renderer: new URLSearchParams(location.search).get("renderer") || "webgl2"
+    });
+    const canvas = bg.canvas;
+    syncControls();
 
-    function targetFor(index, phase, out = target) {
-      const seed = particleSeed[index];
-      if (particleField[index]) {
-        const ax = cachedMotionRandom(index, 0, Math.floor(phase * 0.003));
-        const ay = cachedMotionRandom(index, 1, Math.floor(phase * 0.002), 911);
-        const driftX = Math.sin(phase * 0.0007 + seed) * w * 0.08 * settings.coverage;
-        const driftY = Math.cos(phase * 0.0006 + seed) * h * 0.08 * settings.coverage;
-        out.x = w * (0.08 + ax * 0.84) + driftX;
-        out.y = h * (0.08 + ay * 0.84) + driftY;
-        return out;
-      }
-      const n = (cachedMotionRandom(index, 2, Math.floor(phase * 0.018)) - 0.5) * (settings.turbulence + settings.scatter + dispersalPulse * 0.5);
-      const u = ((seed * 0.618033 + phase * 0.00035) % 1) * 2 - 1;
-      const abs = Math.abs(u);
-      const structureStep = Math.round(u * 18) / 18;
-      const structuredU = u * (1 - settings.dataStructure * 0.42) + structureStep * settings.dataStructure * 0.42;
-      const band = h * (0.025 + 0.21 * settings.density * (1 - Math.exp(-abs * (2 + settings.edgeSoftness * 2.4))));
-      let x = w * 0.5 + structuredU * w * 0.54 * settings.spread * settings.formationScale;
-      let y;
-
-      if (settings.shape === "wave") {
-        y = h * 0.55 + Math.sin(u * Math.PI * 1.4 + phase * 0.0025) * h * 0.2 * settings.crest + n * band;
-      } else if (settings.shape === "arch") {
-        y = h * 0.68 - Math.sin((1 - abs) * Math.PI) * h * 0.34 * settings.crest + n * band;
-      } else if (settings.shape === "vortex") {
-        const turn = u * Math.PI * 2.4 + phase * 0.003 + seed * 0.01;
-        const radius = (0.12 + abs * 0.42 + n * 0.04) * minDimension * settings.spread * settings.formationScale;
-        x = w * 0.5 + Math.cos(turn) * radius;
-        y = h * 0.54 + Math.sin(turn) * radius * (0.5 + settings.arch * 0.5);
-      } else if (settings.shape === "veil") {
-        y = h * (0.5 + u * 0.28) + Math.sin(u * Math.PI * 3 + phase * 0.002) * h * 0.09 * settings.crest + n * band * 1.25;
-      } else if (settings.shape === "spiral") {
-        const turn = u * Math.PI * 3.6 + phase * 0.0024 + n * 0.7;
-        const radius = (0.08 + abs * 0.54) * minDimension * settings.spread * settings.formationScale;
-        x = w * 0.5 + Math.cos(turn) * radius;
-        y = h * 0.55 + Math.sin(turn) * radius * (0.35 + settings.arch * 0.55);
-      } else if (settings.shape === "circle") {
-        const turn = staticRandom[index * 8 + 0] * Math.PI * 2 + phase * 0.00035;
-        const radius = Math.sqrt(staticRandom[index * 8 + 1]) * minDimension * 0.38 * settings.spread * settings.formationScale;
-        x = w * 0.5 + Math.cos(turn) * radius + n * band * 0.25;
-        y = h * 0.55 + Math.sin(turn) * radius + n * band * 0.25;
-      } else if (settings.shape === "flock") {
-        const head = Math.exp(-Math.pow(structuredU + 0.42, 2) * 28) * h * 0.3 * settings.crest;
-        const shoulder = Math.exp(-Math.pow(structuredU - 0.12, 2) * 10) * h * 0.1;
-        const trailingWing = Math.pow((structuredU + 1) * 0.5, 2.15) * h * 0.24 * settings.arch;
-        x += Math.sin((structuredU + 0.2) * Math.PI) * w * 0.045 * settings.spread;
-        y = h * 0.66 - head - shoulder + trailingWing + Math.sin(structuredU * Math.PI * 1.6 + phase * 0.0017) * h * 0.035 + n * band * 0.72;
-      } else if (settings.shape === "swoop") {
-        const travel = (structuredU + 1) * 0.5;
-        const lift = Math.exp(-Math.pow(travel - 0.22, 2) * 25) * h * 0.12 * settings.crest;
-        x = w * (0.17 + travel * 0.66) * settings.spread * settings.formationScale;
-        y = h * (0.24 + Math.pow(travel, 1.7) * 0.56) - lift + n * band * 0.55;
-      } else if (settings.shape === "split-flock") {
-        const branch = staticRandom[index * 8 + 2] > 0.5 ? -1 : 1;
-        const localU = structuredU * 0.78;
-        x = w * 0.5 + branch * w * 0.19 * settings.spread + localU * w * 0.28 * settings.spread * settings.formationScale;
-        y = h * (0.55 + branch * 0.045) + Math.sin(localU * Math.PI * 1.3 + phase * 0.0018) * h * 0.12 * settings.crest + n * band * 0.55;
-      } else {
-        const structuredAbs = Math.abs(structuredU);
-        const crest = Math.exp(-structuredAbs * structuredAbs * 5.4) * h * 0.36 * settings.crest * shapeSubtlety;
-        const wing = Math.pow(abs, 1.7) * h * 0.24 * settings.arch;
-        y = h * (0.62 + 0.09 * Math.sin(u * Math.PI + phase * 0.002)) - crest + wing + n * band;
-      }
-
-      const expansion = 1 + dispersalPulse * 0.34 - settings.gathering * 0.18;
-      const coverageLift = 1 + settings.coverage * 0.38;
-      x = w * 0.5 + (x - w * 0.5) * expansion * coverageLift;
-      y = h * 0.55 + (y - h * 0.55) * expansion * (1 + settings.coverage * 0.5);
-      x += (staticRandom[index * 8 + 3] - 0.5) * w * (0.08 + settings.coverage * 0.18) * settings.scatter * (1.3 - settings.calmness * 0.5);
-      y += (staticRandom[index * 8 + 4] - 0.5) * h * (0.08 + settings.coverage * 0.2) * settings.scatter * (1.3 - settings.calmness * 0.5);
-
-      const hollow = Math.exp(-u * u * 18) * settings.arch * settings.negativeSpace;
-      if (staticRandom[index * 8 + 5] < hollow * 0.55) y += h * (0.13 + 0.16 * staticRandom[index * 8 + 6]);
-
-      const dx = x - centerX;
-      const dy = y - centerY;
-      if (settings.axis === "vertical") {
-        x = centerX + dy;
-        y = centerY + dx;
-      } else if (settings.axis === "diagonal") {
-        const diagonal = Math.PI / 4;
-        x = centerX + dx * diagonalCos - dy * diagonalCos;
-        y = centerY + dx * diagonalCos + dy * diagonalCos;
-      }
-      const rdx = x - centerX;
-      const rdy = y - centerY;
-      out.x = centerX + rdx * rotationCos - rdy * rotationSin;
-      out.y = centerY + rdx * rotationSin + rdy * rotationCos;
-      return out;
-    }
-
-    function nudgeTowardsFormation(multiplier = 0.02) {
-      updateFrameConstants();
-      for (let i = 0; i < particleCount; i++) {
-        if (particleField[i]) continue;
-        const nextTarget = targetFor(i, t);
-        velocityX[i] += (nextTarget.x - particleX[i]) * multiplier;
-        velocityY[i] += (nextTarget.y - particleY[i]) * multiplier;
-      }
-    }
-
-    function clearFrame() {
-      ctx.globalAlpha = 1;
-      ctx.fillStyle = settings.backgroundColor;
-      ctx.fillRect(0, 0, w, h);
-    }
-
-    function easeInOutCubic(value) {
-      return value < 0.5
-        ? 4 * value * value * value
-        : 1 - Math.pow(-2 * value + 2, 3) / 2;
-    }
-
-    function transitionTo(nextState, duration = transitionDuration) {
-      cancelAnimationFrame(transitionFrame);
-      const start = performance.now();
-      const previous = { ...settings };
-      const nextSettings = {
-        ...nextState,
-        theme: settings.theme,
-        particleColor: settings.particleColor,
-        backgroundColor: settings.backgroundColor
-      };
-      const immediateKeys = ["particles", "ambientParticles", "shape", "axis", "particleColor", "backgroundColor"];
-      const numericKeys = Object.keys(nextSettings).filter(key =>
-        typeof previous[key] === "number" &&
-        typeof nextSettings[key] === "number" &&
-        !immediateKeys.includes(key)
-      );
-
-      immediateKeys.forEach(key => { settings[key] = nextSettings[key]; });
-      syncParticleCount();
-      if (previous.shape !== settings.shape) nudgeTowardsFormation();
-      syncControlsFromSettings();
-
-      function tick(now) {
-        const progress = Math.min(1, (now - start) / duration);
-        const eased = easeInOutCubic(progress);
-        numericKeys.forEach(key => {
-          settings[key] = previous[key] + (nextSettings[key] - previous[key]) * eased;
-        });
-        if (progress < 1) {
-          transitionFrame = requestAnimationFrame(tick);
-        } else {
-          Object.assign(settings, nextSettings);
-          syncParticleCount();
-          saveActiveState();
-          syncControlsFromSettings();
-          refreshExport();
-          updatePreviewUrl();
-        }
-      }
-      transitionFrame = requestAnimationFrame(tick);
-    }
-
-    function setPreviewState(nextState) {
-      if (nextState === previewState) return;
-      saveActiveState();
-      previewState = nextState;
-      app.classList.toggle("is-ai-response", previewState === "response");
-      transitionTo(stateConfigs[previewState], transitionDuration);
-      syncControlsFromSettings();
-    }
-
-    function shouldAnimate() {
-      return !document.hidden && !reducedMotionQuery.matches;
-    }
-
-    function stopAnimation() {
-      cancelAnimationFrame(animationId);
-      animationId = 0;
-    }
-
-    function startAnimation() {
-      if (!shouldAnimate() || animationId) return;
-      animationId = requestAnimationFrame(draw);
-    }
-
-    function updateAnimationState() {
-      if (shouldAnimate()) startAnimation();
-      else stopAnimation();
-    }
-
-    function draw() {
-      animationId = 0;
-      if (!shouldAnimate()) return;
-      t += 16 * settings.speed;
-      updateFrameConstants();
-      ctx.fillStyle = settings.backgroundColor;
-      ctx.globalAlpha = settings.fade;
-      ctx.fillRect(0, 0, w, h);
-      ctx.globalAlpha = 1;
-      ctx.fillStyle = settings.particleColor;
-      const attraction = 0.0016 + settings.reformation * 0.0024 + settings.gathering * 0.0012;
-      const flowForce = (0.012 + settings.responsiveness * 0.018) * settings.turbulence * (1.2 - settings.calmness * 0.55);
-      const damping = 0.86 + settings.coordination * 0.08 + settings.calmness * 0.04;
-      const movementScale = settings.speed * (0.65 + settings.responsiveness * 0.55);
-      const depthScale = settings.depth * 0.5;
-      const fieldOpacity = 0.34 + settings.coverage * 0.22;
-      const grainScale = settings.grain * 0.34;
-      const nextFlickerEpoch = Math.floor(t * 0.002);
-      const refreshFlicker = nextFlickerEpoch !== flickerEpoch;
-      flickerEpoch = nextFlickerEpoch;
-
-      for (let i = 0; i < particleCount; i++) {
-        const seed = particleSeed[i];
-        const nextTarget = targetFor(i, t);
-        let x = particleX[i];
-        let y = particleY[i];
-        let vx = velocityX[i];
-        let vy = velocityY[i];
-        const flow = Math.sin((x * 0.006) + (y * 0.004) + t * 0.004 + seed);
-        vx += (nextTarget.x - x) * attraction + Math.cos(flow + seed) * flowForce;
-        vy += (nextTarget.y - y) * attraction + Math.sin(flow * 1.7) * flowForce * 0.78;
-        vx *= damping;
-        vy *= damping;
-        x += vx * movementScale;
-        y += vy * movementScale;
-
-        if (x < -20 || x > w + 20 || y < -20 || y > h + 20) {
-          resetParticle(i);
-          x = particleX[i]; y = particleY[i];
-          vx = velocityX[i]; vy = velocityY[i];
-        }
-        particleX[i] = x; particleY[i] = y;
-        velocityX[i] = vx; velocityY[i] = vy;
-        if (refreshFlicker) flickerCache[i] = rand(particleSeed[i] + flickerEpoch);
-        const flicker = flickerCache[i];
-        const depth = 0.32 + depthScale * staticRandom[i * 8 + 7];
-        const opacity = (0.12 + depth + flicker * grainScale) * (particleField[i] ? fieldOpacity : 1) * centerAttenuationAt(x);
-        ctx.globalAlpha = clamp(opacity, 0.04, 0.92);
-        ctx.fillRect(x, y, settings.particleSize, settings.particleSize);
-      }
-      ctx.globalAlpha = 1;
-      animationId = requestAnimationFrame(draw);
-      ctx.flush?.();
-    }
-
-    function controlMarkup() {
-      return controlGroups.map(group => `<div class="group-title">${group.title}</div>` + group.controls.map(([key, label, min, max, step]) => `
-        <label>
-          ${label}
-          <span class="value" id="${key}Value">${settings[key]}</span>
-          <input type="range" id="${key}" min="${min}" max="${max}" step="${step}" value="${settings[key]}">
-        </label>`).join("")).join("");
-    }
-
-    function refreshExport() {
-      const states = JSON.stringify({
-        home: stateSnapshot(stateConfigs.information || settings),
-        chat: stateSnapshot(stateConfigs.response || settings)
-      }, null, 2);
-      exportCode.value = `<div id="murmuration-bg"></div>
-<script type="module">
-  import { createMurmurationBackground } from "./murmuration-background.js";
-  const states = ${states};
-
-  const murmuration = createMurmurationBackground(
-    document.querySelector("#murmuration-bg"),
-    { states, initialState: "home", transitionDuration: ${transitionDuration} }
-  );
-
-  // When the application changes state:
-  // murmuration.transitionTo("chat");
-
-  // Register additional collections when needed:
-  // murmuration.setState("results", { ...states.chat, shape: "spiral" });
-<\/script>`;
-    }
-
-    function exportedModule() {
-      const defaultSettings = JSON.stringify(stateSnapshot(settings), null, 2);
-      const exportedStates = JSON.stringify({
-        home: stateSnapshot(stateConfigs.information || settings),
-        chat: stateSnapshot(stateConfigs.response || settings)
-      }, null, 2);
-      return `export const murmurationStates = ${exportedStates};
-export const defaultTransitionDuration = ${transitionDuration};
-${createParticleRenderer.toString()}
-
-export function createMurmurationBackground(el, {
-  states = murmurationStates,
-  initialState,
-  transitionDuration = defaultTransitionDuration,
-  renderer = 'webgl2',
-  ...options
-} = {}) {
-  const defaultSettings = ${defaultSettings};
-  const collections = Object.keys(states).length ? states : { default: { ...defaultSettings } };
-  let activeState = initialState && collections[initialState] ? initialState : Object.keys(collections)[0];
-  const settings = { ...defaultSettings, ...collections[activeState], ...options };
-  Object.assign(settings, options);
-  const surface = createParticleRenderer(document.createElement("canvas"), renderer);
-  const canvas = surface.canvas;
-  const ctx = surface.context;
-  Object.assign(el.style, { position: "absolute", inset: "0", overflow: "hidden", zIndex: "-1" });
-  Object.assign(canvas.style, { width: "100%", height: "100%", display: "block" });
-  el.appendChild(canvas);
-  const target = { x: 0, y: 0 };
-  let particleCount = 0;
-  let particleX = new Float32Array(0), particleY = new Float32Array(0);
-  let velocityX = new Float32Array(0), velocityY = new Float32Array(0);
-  let particleSeed = new Float32Array(0);
-    // Float64 preserves the exact pseudo-random values used by the simulation.
-    const staticOffsets = [307, 719, 611, 101, 202, 42, 9, 33];
-    let staticRandom = new Float64Array(0);
-    let flickerCache = new Float64Array(0);
-    let flickerEpoch = NaN;
-    let motionRandom = new Float64Array(0);
-  let particleField = new Uint8Array(0);
-  let w = 1, h = 1, dpr = 1, t = 0, animationId = 0, transitionFrame = 0;
-  let centerX = .5, centerY = .55, minDimension = 1, rotationCos = 1, rotationSin = 0, dispersalPulse = 0, shapeSubtlety = 1;
-  const diagonalCos = Math.SQRT1_2;
-  const reducedMotionQuery = matchMedia("(prefers-reduced-motion: reduce)");
-  const rand = seed => {
-    const x = Math.sin(seed * 127.1) * 43758.5453123;
-    return x - Math.floor(x);
-  };
-  const clamp = (value, min, max) => Math.min(max, Math.max(min, value));
-  const smoothstep = (min, max, value) => {
-    const progress = clamp((value - min) / (max - min), 0, 1);
-    return progress * progress * (3 - 2 * progress);
-  };
-  const centerAttenuationAt = x => {
-    if (settings.centerAttenuation === 0) return 1;
-    const horizontalPosition = x / w;
-    if (horizontalPosition <= .15 || horizontalPosition >= .85) return 1;
-    if (horizontalPosition >= .25 && horizontalPosition <= .75) return 1 - settings.centerAttenuation * .95;
-    const centerBand = horizontalPosition < .25
-      ? smoothstep(.15, .25, horizontalPosition)
-      : 1 - smoothstep(.75, .85, horizontalPosition);
-    return 1 - centerBand * settings.centerAttenuation * .95;
-  };
-  const isConstrainedDevice = () => {
-    const cores = navigator.hardwareConcurrency || 8;
-    const memory = navigator.deviceMemory || 8;
-    return w < 768 || cores <= 4 || memory <= 4;
-  };
-  const effectiveParticleCount = () => Math.min(settings.particles, isConstrainedDevice() ? 6000 : 10000);
-  const renderScale = () => isConstrainedDevice() ? .75 : 1;
-  const ensureParticleCapacity = count => {
-    if (particleX.length >= count) return;
-    const capacity = Math.max(count, Math.ceil(Math.max(1, particleX.length) * 1.5));
-    const nextX = new Float32Array(capacity), nextY = new Float32Array(capacity);
-    const nextVelocityX = new Float32Array(capacity), nextVelocityY = new Float32Array(capacity);
-    const nextSeed = new Float32Array(capacity), nextField = new Uint8Array(capacity);
-    nextX.set(particleX); nextY.set(particleY); nextVelocityX.set(velocityX); nextVelocityY.set(velocityY);
-    nextSeed.set(particleSeed); nextField.set(particleField);
-      const nextRandom = new Float64Array(capacity * staticOffsets.length);
-      nextRandom.set(staticRandom);
-      staticRandom = nextRandom;
-      const nextFlicker = new Float64Array(capacity);
-      nextFlicker.set(flickerCache);
-      flickerCache = nextFlicker;
-      const nextMotion = new Float64Array(capacity * 6);
-      nextMotion.fill(NaN);
-      nextMotion.set(motionRandom);
-      motionRandom = nextMotion;
-    particleX = nextX; particleY = nextY; velocityX = nextVelocityX; velocityY = nextVelocityY;
-    particleSeed = nextSeed; particleField = nextField;
-  };
-  const resetParticle = (index, source = index + 1) => {
-    const r = Math.sqrt(Math.random()), a = Math.random() * Math.PI * 2;
-    const field = rand(index + 78) < settings.ambientParticles;
-    particleX[index] = field ? Math.random() * w : w * .5 + Math.cos(a) * r * w * .42;
-    particleY[index] = field ? Math.random() * h : h * .58 + Math.sin(a) * r * h * .28;
-    velocityX[index] = (Math.random() - .5) * .6; velocityY[index] = (Math.random() - .5) * .6;
-    particleSeed[index] = source * 13.37 + Math.random() * 900;
-    flickerCache[index] = rand(particleSeed[index] + Math.floor(t * .002));
-    motionRandom[index * 6] = motionRandom[index * 6 + 2] = motionRandom[index * 6 + 4] = NaN;
-      for (let slot = 0; slot < staticOffsets.length; slot++) {
-        staticRandom[index * staticOffsets.length + slot] = rand(particleSeed[index] + staticOffsets[slot]);
-      }
-    particleField[index] = field ? 1 : 0;
-  };
-  const updateFrameConstants = () => {
-    const angle = settings.rotation * Math.PI / 180;
-    rotationCos = Math.cos(angle);
-    rotationSin = Math.sin(angle);
-    dispersalPulse = settings.dispersal * (.5 + .5 * Math.sin(t * .0014));
-    shapeSubtlety = .45 + settings.patternSubtlety * .75;
-  };
-  const cachedMotionRandom = (index, slot, epoch, offset = 0) => {
-    const base = index * 6 + slot * 2;
-    if (motionRandom[base] !== epoch) {
-      motionRandom[base] = epoch;
-      motionRandom[base + 1] = rand(particleSeed[index] + offset + epoch);
-    }
-    return motionRandom[base + 1];
-  };
-  const targetFor = (index, out = target) => {
-    const seed = particleSeed[index];
-    if (particleField[index]) {
-      const ax = cachedMotionRandom(index, 0, Math.floor(t * .003));
-      const ay = cachedMotionRandom(index, 1, Math.floor(t * .002), 911);
-      const driftX = Math.sin(t * .0007 + seed) * w * .08 * settings.coverage;
-      const driftY = Math.cos(t * .0006 + seed) * h * .08 * settings.coverage;
-      out.x = w * (.08 + ax * .84) + driftX;
-      out.y = h * (.08 + ay * .84) + driftY;
-      return out;
-    }
-    const n = (cachedMotionRandom(index, 2, Math.floor(t * .018)) - .5) * (settings.turbulence + settings.scatter + dispersalPulse * .5);
-    const u = ((seed * .618033 + t * .00035) % 1) * 2 - 1;
-    const abs = Math.abs(u);
-    const structureStep = Math.round(u * 18) / 18;
-    const structuredU = u * (1 - settings.dataStructure * .42) + structureStep * settings.dataStructure * .42;
-    const band = h * (.025 + .21 * settings.density * (1 - Math.exp(-abs * (2 + settings.edgeSoftness * 2.4))));
-    let x = w * .5 + structuredU * w * .54 * settings.spread * settings.formationScale, y;
-    if (settings.shape === "wave") {
-      y = h * .55 + Math.sin(u * Math.PI * 1.4 + t * .0025) * h * .2 * settings.crest + n * band;
-    } else if (settings.shape === "arch") {
-      y = h * .68 - Math.sin((1 - abs) * Math.PI) * h * .34 * settings.crest + n * band;
-    } else if (settings.shape === "vortex") {
-      const turn = u * Math.PI * 2.4 + t * .003 + seed * .01;
-      const radius = (.12 + abs * .42 + n * .04) * minDimension * settings.spread * settings.formationScale;
-      x = w * .5 + Math.cos(turn) * radius;
-      y = h * .54 + Math.sin(turn) * radius * (.5 + settings.arch * .5);
-    } else if (settings.shape === "veil") {
-      y = h * (.5 + u * .28) + Math.sin(u * Math.PI * 3 + t * .002) * h * .09 * settings.crest + n * band * 1.25;
-    } else if (settings.shape === "spiral") {
-      const turn = u * Math.PI * 3.6 + t * .0024 + n * .7;
-      const radius = (.08 + abs * .54) * minDimension * settings.spread * settings.formationScale;
-      x = w * .5 + Math.cos(turn) * radius;
-      y = h * .55 + Math.sin(turn) * radius * (.35 + settings.arch * .55);
-    } else if (settings.shape === "circle") {
-      const turn = staticRandom[index * 8 + 0] * Math.PI * 2 + t * .00035;
-      const radius = Math.sqrt(staticRandom[index * 8 + 1]) * minDimension * .38 * settings.spread * settings.formationScale;
-      x = w * .5 + Math.cos(turn) * radius + n * band * .25;
-      y = h * .55 + Math.sin(turn) * radius + n * band * .25;
-    } else if (settings.shape === "flock") {
-      const head = Math.exp(-Math.pow(structuredU + .42, 2) * 28) * h * .3 * settings.crest;
-      const shoulder = Math.exp(-Math.pow(structuredU - .12, 2) * 10) * h * .1;
-      const trailingWing = Math.pow((structuredU + 1) * .5, 2.15) * h * .24 * settings.arch;
-      x += Math.sin((structuredU + .2) * Math.PI) * w * .045 * settings.spread;
-      y = h * .66 - head - shoulder + trailingWing + Math.sin(structuredU * Math.PI * 1.6 + t * .0017) * h * .035 + n * band * .72;
-    } else if (settings.shape === "swoop") {
-      const travel = (structuredU + 1) * .5;
-      const lift = Math.exp(-Math.pow(travel - .22, 2) * 25) * h * .12 * settings.crest;
-      x = w * (.17 + travel * .66) * settings.spread * settings.formationScale;
-      y = h * (.24 + Math.pow(travel, 1.7) * .56) - lift + n * band * .55;
-    } else if (settings.shape === "split-flock") {
-      const branch = staticRandom[index * 8 + 2] > .5 ? -1 : 1;
-      const localU = structuredU * .78;
-      x = w * .5 + branch * w * .19 * settings.spread + localU * w * .28 * settings.spread * settings.formationScale;
-      y = h * (.55 + branch * .045) + Math.sin(localU * Math.PI * 1.3 + t * .0018) * h * .12 * settings.crest + n * band * .55;
-    } else {
-      const structuredAbs = Math.abs(structuredU);
-      const crest = Math.exp(-structuredAbs * structuredAbs * 5.4) * h * .36 * settings.crest * shapeSubtlety;
-      const wing = Math.pow(abs, 1.7) * h * .24 * settings.arch;
-      y = h * (.62 + .09 * Math.sin(u * Math.PI + t * .002)) - crest + wing + n * band;
-    }
-    const expansion = 1 + dispersalPulse * .34 - settings.gathering * .18;
-    const coverageLift = 1 + settings.coverage * .38;
-    x = w * .5 + (x - w * .5) * expansion * coverageLift;
-    y = h * .55 + (y - h * .55) * expansion * (1 + settings.coverage * .5);
-    x += (staticRandom[index * 8 + 3] - .5) * w * (.08 + settings.coverage * .18) * settings.scatter * (1.3 - settings.calmness * .5);
-    y += (staticRandom[index * 8 + 4] - .5) * h * (.08 + settings.coverage * .2) * settings.scatter * (1.3 - settings.calmness * .5);
-    const hollow = Math.exp(-u * u * 18) * settings.arch * settings.negativeSpace;
-    if (staticRandom[index * 8 + 5] < hollow * .55) y += h * (.13 + .16 * staticRandom[index * 8 + 6]);
-    const dx = x - centerX, dy = y - centerY;
-    if (settings.axis === "vertical") {
-      x = centerX + dy; y = centerY + dx;
-    } else if (settings.axis === "diagonal") {
-      x = centerX + dx * diagonalCos - dy * diagonalCos;
-      y = centerY + dx * diagonalCos + dy * diagonalCos;
-    }
-    const rdx = x - centerX, rdy = y - centerY;
-    out.x = centerX + rdx * rotationCos - rdy * rotationSin;
-    out.y = centerY + rdx * rotationSin + rdy * rotationCos;
-    return out;
-  };
-  const syncParticleCount = () => {
-    const count = effectiveParticleCount();
-    ensureParticleCapacity(count);
-    while (particleCount < count) {
-      resetParticle(particleCount, particleCount + 1);
-      particleCount += 1;
-    }
-    particleCount = count;
-    for (let i = 0; i < particleCount; i++) particleField[i] = rand(i + 78) < settings.ambientParticles ? 1 : 0;
-  };
-  const nudgeTowardsFormation = (multiplier = .02) => {
-    updateFrameConstants();
-    for (let i = 0; i < particleCount; i++) {
-      if (particleField[i]) continue;
-      const nextTarget = targetFor(i);
-      velocityX[i] += (nextTarget.x - particleX[i]) * multiplier;
-      velocityY[i] += (nextTarget.y - particleY[i]) * multiplier;
-    }
-  };
-  const easeInOutCubic = value => value < .5
-    ? 4 * value * value * value
-    : 1 - Math.pow(-2 * value + 2, 3) / 2;
-  function resize() {
-    const box = el.getBoundingClientRect();
-    dpr = Math.min(window.devicePixelRatio || 1, renderScale());
-    w = Math.max(1, Math.floor(box.width)); h = Math.max(1, Math.floor(box.height));
-    centerX = w * .5; centerY = h * .55; minDimension = Math.min(w, h);
-    canvas.width = Math.floor(w * dpr); canvas.height = Math.floor(h * dpr);
-    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    syncParticleCount();
-    ctx.globalAlpha = 1; ctx.fillStyle = settings.backgroundColor; ctx.fillRect(0, 0, w, h);
-  }
-  function transitionTo(name, duration = transitionDuration) {
-    if (!Object.prototype.hasOwnProperty.call(collections, name)) {
-      throw new Error(\`Unknown murmuration state: \${name}\`);
-    }
-    cancelAnimationFrame(transitionFrame);
-    const previous = { ...settings };
-    const nextSettings = { ...defaultSettings, ...collections[name] };
-    const immediateKeys = ["particles", "ambientParticles", "shape", "axis", "particleColor", "backgroundColor"];
-    const numericKeys = Object.keys(nextSettings).filter(key =>
-      typeof previous[key] === "number" &&
-      typeof nextSettings[key] === "number" &&
-      !immediateKeys.includes(key)
-    );
-    immediateKeys.forEach(key => { settings[key] = nextSettings[key]; });
-    syncParticleCount();
-    if (previous.shape !== settings.shape) nudgeTowardsFormation();
-    activeState = name;
-    if (duration <= 0) {
-      Object.assign(settings, nextSettings);
-      syncParticleCount();
-      return;
-    }
-    const start = performance.now();
-    const tick = now => {
-      const progress = Math.min(1, (now - start) / duration);
-      const eased = easeInOutCubic(progress);
-      numericKeys.forEach(key => {
-        settings[key] = previous[key] + (nextSettings[key] - previous[key]) * eased;
-      });
-      if (progress < 1) {
-        transitionFrame = requestAnimationFrame(tick);
-      } else {
-        Object.assign(settings, nextSettings);
-        syncParticleCount();
-      }
-    };
-    transitionFrame = requestAnimationFrame(tick);
-  }
-  const shouldAnimate = () => !document.hidden && !reducedMotionQuery.matches;
-  const stopAnimation = () => {
-    cancelAnimationFrame(animationId);
-    animationId = 0;
-  };
-  const startAnimation = () => {
-    if (!shouldAnimate() || animationId) return;
-    animationId = requestAnimationFrame(frame);
-    ctx.flush?.();
-  };
-  const updateAnimationState = () => {
-    if (shouldAnimate()) startAnimation();
-    else stopAnimation();
-  };
-  function frame() {
-    animationId = 0;
-    if (!shouldAnimate()) return;
-    t += 16 * settings.speed;
-    updateFrameConstants();
-    ctx.globalAlpha = settings.fade; ctx.fillStyle = settings.backgroundColor; ctx.fillRect(0, 0, w, h);
-    ctx.globalAlpha = 1; ctx.fillStyle = settings.particleColor;
-    const attraction = .0016 + settings.reformation * .0024 + settings.gathering * .0012;
-    const flowForce = (.012 + settings.responsiveness * .018) * settings.turbulence * (1.2 - settings.calmness * .55);
-    const damping = .86 + settings.coordination * .08 + settings.calmness * .04;
-    const movementScale = settings.speed * (.65 + settings.responsiveness * .55);
-    const depthScale = settings.depth * .5;
-    const fieldOpacity = .34 + settings.coverage * .22;
-    const grainScale = settings.grain * .34;
-    const nextFlickerEpoch = Math.floor(t * .002);
-    const refreshFlicker = nextFlickerEpoch !== flickerEpoch;
-    flickerEpoch = nextFlickerEpoch;
-    for (let i = 0; i < particleCount; i++) {
-      const seed = particleSeed[i];
-      const nextTarget = targetFor(i);
-      let x = particleX[i], y = particleY[i], vx = velocityX[i], vy = velocityY[i];
-      const flow = Math.sin((x * .006) + (y * .004) + t * .004 + seed);
-      vx += (nextTarget.x - x) * attraction + Math.cos(flow + seed) * flowForce;
-      vy += (nextTarget.y - y) * attraction + Math.sin(flow * 1.7) * flowForce * .78;
-      vx *= damping; vy *= damping;
-      x += vx * movementScale; y += vy * movementScale;
-      if (x < -20 || x > w + 20 || y < -20 || y > h + 20) {
-        resetParticle(i);
-        x = particleX[i]; y = particleY[i]; vx = velocityX[i]; vy = velocityY[i];
-      }
-      particleX[i] = x; particleY[i] = y; velocityX[i] = vx; velocityY[i] = vy;
-      if (refreshFlicker) flickerCache[i] = rand(particleSeed[i] + flickerEpoch);
-      const flicker = flickerCache[i];
-      const depth = .32 + depthScale * staticRandom[i * 8 + 7];
-      const opacity = (.12 + depth + flicker * grainScale) * (particleField[i] ? fieldOpacity : 1) * centerAttenuationAt(x);
-      ctx.globalAlpha = Math.min(.92, Math.max(.04, opacity));
-      ctx.fillRect(x, y, settings.particleSize, settings.particleSize);
-    }
-    animationId = requestAnimationFrame(frame);
-  }
-  const onResize = () => resize();
-  addEventListener("resize", onResize);
-  document.addEventListener("visibilitychange", updateAnimationState);
-  reducedMotionQuery.addEventListener("change", updateAnimationState);
-  resize();
-  startAnimation();
-  return {
-    canvas,
-    get activeState() { return activeState; },
-    setState(name, state) { collections[name] = { ...defaultSettings, ...state }; },
-    transitionTo,
-    update(nextOptions = {}) { Object.assign(settings, nextOptions); syncParticleCount(); },
-    destroy() { stopAnimation(); cancelAnimationFrame(transitionFrame); removeEventListener("resize", onResize); document.removeEventListener("visibilitychange", updateAnimationState); reducedMotionQuery.removeEventListener("change", updateAnimationState); ctx.destroy?.(); canvas.remove(); }
-  };
-}`;
-    }
-
-    document.getElementById("controls").innerHTML = controlMarkup();
-    const hasSharedStates = applySharedConfig();
-    if (!hasSharedStates) {
-      stateConfigs.information = stateSnapshot();
-      stateConfigs.response = { ...stateSnapshot(), ...aiResponseDefaults };
-    }
-    app.classList.toggle("is-ai-response", previewState === "response");
-    syncControlsFromSettings();
     controls.forEach(([key]) => {
-      const input = document.getElementById(key);
-      const output = document.getElementById(`${key}Value`);
+      const input = el(key);
       input.addEventListener("input", () => {
-        settings[key] = Number(input.value);
-        output.textContent = settings[key];
-        if (key === "particles" || key === "ambientParticles") syncParticleCount();
-        saveActiveState();
-        refreshExport();
-        updatePreviewUrl();
+        const value = Number(input.value);
+        states[activeState][key] = value;
+        el(`${key}Value`).textContent = value;
+        bg.update({ [key]: value });
+        if (key === "particles") updateReadout();
+        commit();
       });
     });
 
-    ["particleColor", "backgroundColor"].forEach(key => {
-      document.getElementById(key).addEventListener("input", event => {
-        settings[key] = event.target.value;
-        saveActiveState();
-        refreshExport();
-        updatePreviewUrl();
+    ["shape", "axis"].forEach(key => {
+      el(key).addEventListener("change", event => {
+        states[activeState][key] = event.target.value;
+        // update() regroups the flock toward a new shape and clears stale trails.
+        bg.update({ [key]: event.target.value });
+        commit();
       });
     });
 
-    ["axis", "shape"].forEach(key => {
-      document.getElementById(key).addEventListener("change", event => {
-        settings[key] = event.target.value;
-        if (key === "shape") nudgeTowardsFormation();
-        saveActiveState();
-        refreshExport();
-        clearFrame();
-        updatePreviewUrl();
+    COLOR_KEYS.forEach(key => {
+      el(key).addEventListener("input", event => {
+        states[activeState].colors[theme][key] = event.target.value;
+        bg.update({ [key]: event.target.value });
+        commit();
       });
     });
 
-    transitionDurationInput.addEventListener("change", () => {
-      transitionDuration = clamp(Number(transitionDurationInput.value) || 0, 0, 5000);
-      transitionDurationInput.value = transitionDuration;
-      refreshExport();
-      updatePreviewUrl();
+    transitionInput.addEventListener("change", () => {
+      transitionDuration = clamp(Number(transitionInput.value) || 0, 0, 5000);
+      transitionInput.value = transitionDuration;
+      app.style.setProperty("--dur", `${transitionDuration}ms`);
+      commit();
     });
 
-    document.querySelectorAll("[data-preset]").forEach(button => {
-      button.addEventListener("click", () => {
-        const presets = {
-          paper: { theme: "light", particleColor: "#C2C2C2", backgroundColor: "#FFFFFF", fade: 0.24, centerAttenuation: 0, turbulence: 0.42, axis: "horizontal", shape: "ridge", coverage: 0.72, formationScale: 1.18, ambientParticles: 0.34, spread: 1.02, scatter: 0.42, coordination: 0.8, gathering: 0.46, dispersal: 0.48, reformation: 0.64, responsiveness: 0.35, calmness: 0.82, dataStructure: 0.32, patternSubtlety: 0.74, negativeSpace: 0.56, edgeSoftness: 0.8, depth: 0.55, grain: 0.48 },
-          night: { theme: "dark", particleColor: "#737373", backgroundColor: "#000000", fade: 0.18, centerAttenuation: 0, turbulence: 0.5, axis: "diagonal", shape: "wave", coverage: 0.82, formationScale: 1.26, ambientParticles: 0.42, spread: 1.08, scatter: 0.56, coordination: 0.72, gathering: 0.38, dispersal: 0.62, reformation: 0.7, responsiveness: 0.52, calmness: 0.66, dataStructure: 0.48, patternSubtlety: 0.62, negativeSpace: 0.36, edgeSoftness: 0.72, depth: 0.78, grain: 0.38 },
-          warm: { theme: "light", particleColor: "#C2C2C2", backgroundColor: "#FFFFFF", fade: 0.26, centerAttenuation: 0, turbulence: 0.36, axis: "horizontal", shape: "veil", coverage: 0.68, formationScale: 1.14, ambientParticles: 0.38, spread: 1, scatter: 0.36, coordination: 0.86, gathering: 0.5, dispersal: 0.38, reformation: 0.58, responsiveness: 0.25, calmness: 0.9, dataStructure: 0.22, patternSubtlety: 0.82, negativeSpace: 0.64, edgeSoftness: 0.86, depth: 0.45, grain: 0.52 }
-        };
-        Object.assign(settings, presets[button.dataset.preset]);
-        syncControlsFromSettings();
-        syncParticleCount();
-        saveActiveState();
-        refreshExport();
-        clearFrame();
-        updatePreviewUrl();
-      });
-    });
-
-    document.getElementById("copyBtn").addEventListener("click", async () => {
-      await navigator.clipboard.writeText(exportCode.value);
-    });
-
-    copyPreviewBtn.addEventListener("click", async () => {
-      await navigator.clipboard.writeText(getPreviewUrl());
-      copyPreviewBtn.textContent = "Preview link copied";
-      setTimeout(() => { copyPreviewBtn.textContent = "Copy preview link"; }, 1400);
-    });
-
-    document.getElementById("downloadBtn").addEventListener("click", () => {
-      const blob = new Blob([exportedModule()], { type: "text/javascript" });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = "murmuration-background.js";
-      a.click();
-      URL.revokeObjectURL(url);
-    });
+    homeBtn.addEventListener("click", () => setActiveState("information"));
+    chatBtn.addEventListener("click", () => setActiveState("response"));
+    lightBtn.addEventListener("click", () => setTheme("light"));
+    darkBtn.addEventListener("click", () => setTheme("dark"));
 
     overlayToggle.addEventListener("click", () => {
       overlayVisible = !overlayVisible;
-      settings.overlay = overlayVisible;
-      syncControlsFromSettings();
-      refreshExport();
-      updatePreviewUrl();
-    });
-
-    themeToggle.addEventListener("click", () => {
-      settings.theme = settings.theme === "dark" ? "light" : "dark";
-      applyThemePalette();
-      Object.values(stateConfigs).filter(Boolean).forEach(applyThemePalette);
-      syncControlsFromSettings();
-      saveActiveState();
-      refreshExport();
-      clearFrame();
-      updatePreviewUrl();
+      syncControls();
+      commit();
     });
 
     panelToggle.addEventListener("click", () => {
       const isHidden = app.classList.toggle("is-panel-hidden");
       panelToggle.textContent = isHidden ? "Show panel" : "Hide panel";
       panelToggle.setAttribute("aria-expanded", String(!isHidden));
-      requestAnimationFrame(resize);
+      // The runtime follows its container with a ResizeObserver; refresh the active count afterwards.
+      requestAnimationFrame(updateReadout);
     });
 
-    responseToggle.addEventListener("click", () => {
-      setPreviewState(previewState === "response" ? "information" : "response");
-    });
+    copyBtn.addEventListener("click", () => copyText(exportCode.value, "Snippet"));
+    copyPreviewBtn.addEventListener("click", savePreviewLink);
+
+    downloadBtn.addEventListener("click", saveModule);
 
     refreshExport();
-    addEventListener("resize", resize);
-    document.addEventListener("visibilitychange", updateAnimationState);
-    reducedMotionQuery.addEventListener("change", updateAnimationState);
-    resize();
-    clearFrame();
-    startAnimation();
+    updateReadout();
+    addEventListener("resize", updateReadout);
   </script>
 </body>
 </html>

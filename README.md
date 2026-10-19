@@ -21,6 +21,19 @@ Run `node tests/runtime-cache.cjs` for fallback regression tests. With Playwrigh
 Chrome available and a local server on port 4174, run `node tests/webgl-browser.cjs`
 for browser rendering, exported module, and desktop/mobile checks.
 
+## Architecture
+
+One runtime drives both the lab preview and the downloaded module, so a behavior change is made once.
+
+| File | Responsibility |
+| --- | --- |
+| `murmuration-runtime.js` | `createMurmurationRuntime()`: simulation, state transitions, lifecycle. Also defines `MURMURATION_DEFAULTS`, the single source of default parameter values. |
+| `particle-renderer.js` | `createParticleRenderer()`: batched WebGL2 drawing with automatic Canvas 2D fallback. |
+| `murmuration-export.js` | Builds the downloadable module and the integration snippet. |
+| `index.html` | Editor only: controls, saved Home/Chat collections, share links, overlays. It drives the runtime through its public API (`update`, `setState`, `transitionTo`, `clear`), as an integrator would. |
+
+Download JS serializes `createParticleRenderer`, `createMurmurationRuntime` and `MURMURATION_DEFAULTS` with `Function.prototype.toString()`. For that reason `createMurmurationRuntime` and `createParticleRenderer` must stay self-contained: they may reference only each other and `MURMURATION_DEFAULTS`. `tests/runtime-cache.cjs` evaluates the generated module in an empty sandbox to catch a missing dependency.
+
 ## Baseline
 
 Murmuration Background is a dependency-free WebGL2 animation with Canvas 2D fallback for web application backgrounds. It renders a field of particles that behaves like a flock and can reorganize between named visual states.
@@ -31,11 +44,11 @@ The lab at [www.neybarao.com/murmuration](https://www.neybarao.com/murmuration/)
 
 The downloaded `murmuration-background.js` exports:
 
-- `murmurationStates`: the tuned `home` and `chat` state collections.
+- `murmurationStates`: the tuned `home` and `chat` state collections, each with light and dark colors.
 - `defaultTransitionDuration`: the duration selected in the lab, in milliseconds.
 - `createMurmurationBackground()`: creates and controls a Canvas instance.
 
-The exported runtime does not include the lab-only `theme` or `overlay` settings. Those belong to the host application UI, not the background animation.
+The overlay preview is lab-only and is not exported. The lab's current theme appears in the snippet as the `theme` option; the host application should pass its own theme and call `setTheme()` when it changes.
 
 ## Quick Start
 
@@ -139,104 +152,80 @@ murmuration.transitionTo("results");
 
 ### `createMurmurationBackground(element, options)`
 
-Creates the Canvas element, starts the animation loop, and returns a controller.
+Creates the canvas element, starts the animation loop, and returns a controller. The target element is made absolutely positioned and the canvas fills it.
 
 | Option | Type | Description |
 | --- | --- | --- |
 | `states` | `Record<string, State>` | Named state collections. Defaults to `murmurationStates` from the downloaded module. |
 | `initialState` | `string` | State shown at startup. Defaults to the first supplied state. |
 | `transitionDuration` | `number` | Default transition duration in milliseconds. Default: `200`. |
+| `renderer` | `"webgl2"` \| `"canvas2d"` | Backend. Defaults to `"webgl2"` with automatic Canvas 2D fallback. |
+| `theme` | `"light"` \| `"dark"` | Which `colors` pair to use. Default: `"light"`. |
 | Other state properties | `State` fields | One-off overrides applied on top of the initial state. |
 
 ### Controller
 
 | Member | Description |
 | --- | --- |
-| `canvas` | The generated `<canvas>` element. |
+| `canvas` | The generated `<canvas>` element. `canvas.dataset.renderer` is `webgl2` or `canvas2d`. |
+| `activeParticles` | Read-only count of particles currently simulated, after runtime limits. |
 | `activeState` | Read-only name of the most recently selected state. |
+| `theme`, `setTheme(name)` | Read the active theme, or switch between `"light"` and `"dark"` colors. Unknown names are ignored. |
 | `transitionTo(name, duration?)` | Transitions to a registered state. Throws for an unknown name. |
 | `setState(name, state)` | Adds or replaces a named state. |
-| `update(options)` | Applies direct overrides to the current animation. Prefer named states for application screens. |
-| `destroy()` | Stops animation, removes listeners, and removes the canvas. Call on view teardown. |
+| `update(options)` | Applies direct overrides to the current animation. Changing `shape` steers the flock toward the new formation, and changing `shape` or `axis` clears stale trails. An edit made during a transition becomes part of that transition's destination. Prefer named states for application screens. |
+| `clear()` | Repaints the background color, discarding trails. |
+| `destroy()` | Stops animation, removes listeners and the resize observer, and removes the canvas. Safe to call twice; later calls to the controller are ignored. Call on view teardown. |
 
 ## State Parameters
 
-All numeric controls should remain within the ranges below. The lab enforces these bounds; code integrations should do the same.
-
-### Core
+A state, as saved by the lab and exported, has these 14 settings plus `colors`. Keep numeric values inside the ranges; the lab enforces them and code integrations should too. Anything omitted uses the built-in default.
 
 | Parameter | Range | Effect |
 | --- | --- | --- |
-| `particles` | `2000-32000` | Particle count. Higher values increase visual density and CPU/GPU work. |
-| `speed` | `0-2` | Simulation speed. |
-| `rotation` | `-35-35` | Rotation in degrees. |
-| `axis` | `horizontal`, `vertical`, `diagonal` | Primary orientation of the formation. |
 | `shape` | See Shapes | Target formation. |
-| `coverage` | `0-1` | Overall occupied area and ambient drift. |
+| `axis` | `horizontal`, `vertical`, `diagonal` | Primary orientation of the formation. |
 | `formationScale` | `0.7-1.8` | Scale of the main formation. |
-| `ambientParticles` | `0-0.75` | Proportion of particles that float outside the main formation. |
 | `spread` | `0.35-1.4` | Horizontal and radial expansion. |
 | `scatter` | `0-1.2` | Random positional variation around the formation. |
-
-### Swarm Behavior
-
-| Parameter | Range | Effect |
-| --- | --- | --- |
-| `coordination` | `0-1` | Velocity damping and flock cohesion. |
-| `gathering` | `0-1` | Pull toward the formation. |
-| `dispersal` | `0-1` | Periodic expansion of the formation. |
-| `reformation` | `0-1` | Attraction back toward each particle target. |
-| `responsiveness` | `0-1` | Sensitivity to flow and target movement. |
-| `calmness` | `0-1` | Reduces motion noise and turbulence. |
-
-### Pattern
-
-| Parameter | Range | Effect |
-| --- | --- | --- |
-| `turbulence` | `0-1.4` | Flow-field variation. |
-| `dataStructure` | `0-1` | Quantizes particle paths into more legible bands. |
-| `patternSubtlety` | `0-1` | Controls the prominence of the main crest. |
-| `negativeSpace` | `0-1` | Creates gaps in the center of the formation. |
-| `edgeSoftness` | `0-1` | Softens density changes at formation edges. |
 | `crest` | `0.1-1.1` | Height of waves, ridges, and flock heads. |
-| `arch` | `0.1-1.1` | Opening and curvature of the formation. |
-| `density` | `0.1-1` | Thickness of the particle band. |
-
-### Visual
-
-| Parameter | Range | Effect |
-| --- | --- | --- |
+| `rotation` | `-35-35` | Rotation in degrees. |
+| `speed` | `0-2` | Simulation speed. |
+| `particles` | `2000-32000` | Particle count. Higher values increase visual density and CPU/GPU work. |
 | `particleSize` | `0.35-1.8` | Canvas particle size in CSS pixels. |
 | `fade` | `0.04-0.5` | Background repaint opacity per frame. Lower values leave longer trails. |
 | `centerAttenuation` | `0-1` | Reduces particle opacity inside the central 70% of the viewport width. At `1`, center particles retain 5% of their unattenuated opacity. |
 | `depth` | `0-1` | Per-particle opacity variation. |
 | `grain` | `0-1` | Temporal opacity variation. |
-| `particleColor` | CSS color string | Particle fill color. |
-| `backgroundColor` | CSS color string | Canvas background color. |
+| `colors` | `{ light, dark }` | One `{ particleColor, backgroundColor }` pair (CSS colors) per theme. See Light and Dark Themes. |
+
+The runtime still understands the older fine-tuning keys (`coverage`, `ambientParticles`, `coordination`, `gathering`, `dispersal`, `reformation`, `responsiveness`, `calmness`, `turbulence`, `dataStructure`, `patternSubtlety`, `negativeSpace`, `edgeSoftness`, `arch`, `density`). The lab no longer shows or exports them and they keep the Home defaults, but an integration can still pass them through `update()` or a state. Flat `particleColor` and `backgroundColor` also still work and override the theme pair.
 
 ### Shapes
 
 `ridge`, `wave`, `arch`, `vortex`, `veil`, `spiral`, `circle`, `flock`, `swoop`, and `split-flock` are supported values for `shape`.
 
-## Light and Dark Host Themes
+Two formations are not a function of a single coordinate:
 
-Theme is intentionally controlled by the host application. Apply colors in each state when a theme changes, then transition or update the animation.
+- `circle` is a flat ring facing the viewer with nothing in the middle. `spread` and `formationScale` set its radius, `scatter` loosens it, and `crest` adds a slow ripple along the circumference. It ignores `axis` and `rotation`, which cannot change a circle. Ambient particles orbit outside the ring instead of crossing the middle.
+- `swoop` is a cloud that wanders across the screen, wheels, and expands and contracts like a breath, with no repeating track. `spread` and `formationScale` set its length and `crest` the ripple along its edges. `axis` and `rotation` still apply on top of its own heading.
+
+## Preview Link and Hosted Pages
+
+Run locally, **Copy preview link** copies the page address with the settings in `?config=`. Hosted pages that sit inside a frame drop the query string, so the link could not carry the settings. A page built with `node tools/build-artifact.cjs <published-url> <out-file>` is one self-contained file that can save the settings into itself: **Copy preview link** copies the published address, then republishes the page with the current Home/Chat settings, colors, theme and transition duration. Opening that address shows exactly those settings. This needs permission to republish the page (editors only), and each save replaces the previous one. `tests/hosted-save.cjs` covers the round trip.
+
+## Light and Dark Themes
+
+Each state stores one color pair per theme, so Home and Chat each have their own light and dark colors. The lab's Light/Dark switch only chooses which pair is shown and edited; nothing is overwritten when you switch screens or themes. The exported file carries both pairs.
 
 ```js
-const lightColors = {
-  backgroundColor: "#FFFFFF",
-  particleColor: "#C2C2C2"
-};
+const murmuration = createMurmurationBackground(element, { initialState: "home", theme: "dark" });
 
-const darkColors = {
-  backgroundColor: "#000000",
-  particleColor: "#737373"
-};
-
-murmuration.update(darkColors);
+// When the host application changes theme:
+murmuration.setTheme("light");
 ```
 
-For state-specific colors, merge the colors into the relevant state before calling `transitionTo()`.
+`theme` is `"light"` (default) or `"dark"`. `setTheme()` re-resolves the colors of the current state, also inside a running transition, and repaints. `murmuration.theme` reads the active theme. `update({ colors })` accepts a `{ light, dark }` object and applies the active theme's pair.
 
 ## Accessibility and Reduced Motion
 

@@ -1,6 +1,9 @@
 // Canvas-compatible drawing surface for the experimental batched WebGL2 renderer.
 function createParticleRenderer(original, backend = 'webgl2') {
-  const fallback = () => ({ canvas: original, context: original.getContext('2d', { alpha: false }), backend: 'canvas2d' });
+  const fallback = () => {
+    original.dataset.renderer = 'canvas2d';
+    return { canvas: original, context: original.getContext('2d', { alpha: false }), backend: 'canvas2d' };
+  };
   if (backend === 'canvas2d') return fallback();
   const canvas = original.cloneNode(false);
   let gl;
