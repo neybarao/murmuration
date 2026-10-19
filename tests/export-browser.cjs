@@ -2,7 +2,7 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const { chromium } = require('playwright');
 (async () => {
-  const browser = await chromium.launch({ channel: 'chrome', headless: true });
+  const browser = await chromium.launch({ executablePath: process.env.CHROME_BIN || undefined, channel: process.env.CHROME_BIN ? undefined : 'chrome', headless: true });
   try {
     const context = await browser.newContext({ permissions: ['clipboard-read', 'clipboard-write'] });
     const page = await context.newPage();
@@ -10,12 +10,22 @@ const { chromium } = require('playwright');
     page.on('pageerror', e => errors.push(e.message));
     await page.goto('http://127.0.0.1:4174/');
     await page.locator('#shape').selectOption('wave');
-    await page.locator('#responseToggle').click();
+    await page.locator('#chatBtn').click();
     await page.waitForTimeout(400);
     await page.locator('#shape').selectOption('spiral');
-    await page.locator('#themeToggle').click();
+    await page.locator('#darkBtn').click();
     await page.locator('#particleColor').fill('#abcdef');
     await page.locator('#backgroundColor').fill('#123456');
+    // Each screen keeps its own color pair per theme: switching screens or themes never rewrites them.
+    const colorsShown = () => page.evaluate(() => [particleColor.value, backgroundColor.value]);
+    await page.locator('#homeBtn').click();
+    assert.deepEqual(await colorsShown(), ['#737373', '#000000'], 'Home dark keeps its own colors');
+    await page.locator('#lightBtn').click();
+    assert.deepEqual(await colorsShown(), ['#c2c2c2', '#ffffff'], 'Home light keeps its own colors');
+    await page.locator('#chatBtn').click();
+    assert.deepEqual(await colorsShown(), ['#c2c2c2', '#ffffff'], 'Chat light keeps its own colors');
+    await page.locator('#darkBtn').click();
+    assert.deepEqual(await colorsShown(), ['#abcdef', '#123456'], 'Chat dark colors are preserved');
     await page.locator('#overlayToggle').click();
     await page.locator('#transitionDuration').fill('750');
     await page.locator('#transitionDuration').dispatchEvent('change');
@@ -24,7 +34,11 @@ const { chromium } = require('playwright');
     const copied = await page.evaluate(() => navigator.clipboard.readText());
     assert.equal(copied, await page.locator('#exportCode').inputValue());
     assert(copied.includes('transitionDuration: 750'));
+    assert(copied.includes('theme: "dark"'));
     assert(!copied.includes('"theme"') && !copied.includes('"overlay"'));
+    for (const hidden of ['coverage', 'turbulence', 'ambientParticles', 'dispersal', 'negativeSpace']) {
+      assert(!copied.includes(hidden), `${hidden} must not be part of the exported config`);
+    }
     const downloadPromise = page.waitForEvent('download');
     await page.locator('#downloadBtn').click();
     const download = await downloadPromise;
@@ -47,6 +61,7 @@ const { chromium } = require('playwright');
     assert.equal(exported.duration, 750);
     assert.deepEqual(exported.states.home, expected.states.information);
     assert.deepEqual(exported.states.chat, expected.states.response);
+    assert.deepEqual(exported.states.chat.colors.dark, { particleColor: '#abcdef', backgroundColor: '#123456' });
     await page.locator('#copyPreviewBtn').click();
     const url = await page.evaluate(() => navigator.clipboard.readText());
     const recipient = await browser.newPage();

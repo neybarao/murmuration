@@ -43,13 +43,22 @@ function createMurmurationRuntime(el, {
   initialState,
   transitionDuration = 200,
   renderer = 'webgl2',
+  theme = 'light',
   ...options
 } = {}) {
   const defaultSettings = MURMURATION_DEFAULTS;
+  let activeTheme = theme === 'dark' ? 'dark' : 'light';
+  // A state may carry `colors: { light: {...}, dark: {...} }`. The pair for the active theme becomes
+  // the flat particleColor/backgroundColor the simulation uses. States without `colors` use their
+  // flat colors for every theme.
+  const resolveState = state => {
+    const { colors, ...flat } = { ...defaultSettings, ...state };
+    return Object.assign(flat, colors && colors[activeTheme]);
+  };
   // Shallow copy so setState() never mutates the caller's collection object.
   const collections = states && Object.keys(states).length ? { ...states } : { default: { ...defaultSettings } };
   let activeState = initialState && collections[initialState] ? initialState : Object.keys(collections)[0];
-  const settings = { ...defaultSettings, ...collections[activeState], ...options };
+  const settings = { ...resolveState(collections[activeState]), ...options };
   const surface = createParticleRenderer(document.createElement("canvas"), renderer);
   const canvas = surface.canvas;
   const ctx = surface.context;
@@ -322,7 +331,7 @@ function createMurmurationRuntime(el, {
     cancelAnimationFrame(transitionFrame);
     // An interrupted transition continues from the current interpolated values.
     const previous = { ...settings };
-    const nextSettings = { ...defaultSettings, ...collections[name] };
+    const nextSettings = resolveState(collections[name]);
     const immediateKeys = ["particles", "ambientParticles", "shape", "axis", "particleColor", "backgroundColor"];
     const numericKeys = Object.keys(nextSettings).filter(key =>
       typeof previous[key] === "number" &&
@@ -359,6 +368,10 @@ function createMurmurationRuntime(el, {
   }
   function update(nextOptions = {}) {
     if (destroyed) return;
+    if (nextOptions.colors) {
+      const { colors, ...rest } = nextOptions;
+      nextOptions = Object.assign(rest, colors[activeTheme]);
+    }
     const shapeChanged = nextOptions.shape !== undefined && nextOptions.shape !== settings.shape;
     const compositionChanged = shapeChanged || (nextOptions.axis !== undefined && nextOptions.axis !== settings.axis);
     Object.assign(settings, nextOptions);
@@ -439,6 +452,16 @@ function createMurmurationRuntime(el, {
     transitionTo,
     update,
     clear() { if (!destroyed) clearFrame(); },
+    get theme() { return activeTheme; },
+    // Switches to the other palette of the active state without touching anything else.
+    setTheme(name) {
+      if (destroyed || (name !== 'light' && name !== 'dark')) return;
+      activeTheme = name;
+      const { particleColor, backgroundColor } = resolveState(collections[activeState]);
+      Object.assign(settings, { particleColor, backgroundColor });
+      if (transition) Object.assign(transition.nextSettings, { particleColor, backgroundColor });
+      clearFrame();
+    },
     destroy() {
       if (destroyed) return;
       destroyed = true;

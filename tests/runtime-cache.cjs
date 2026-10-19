@@ -328,12 +328,48 @@ const percentile = (values, fraction) => [...values].sort((a, b) => a - b)[Math.
   console.log('PASS: exported module is self-contained, renders identically, rejects unknown states, and ignores calls after destroy()');
 }
 
+// ---- Per-theme colors ----------------------------------------------------------------------------
+{
+  const colors = {
+    home: { light: { particleColor: '#111111', backgroundColor: '#eeeeee' }, dark: { particleColor: '#aaaaaa', backgroundColor: '#010101' } },
+    chat: { light: { particleColor: '#222222', backgroundColor: '#dddddd' }, dark: { particleColor: '#bbbbbb', backgroundColor: '#020202' } }
+  };
+  const app = sandbox({ scripts: runtimeScripts() });
+  app.context.host = app.element();
+  app.run(`var states = { home: { shape: 'wave', colors: ${JSON.stringify(colors.home)} }, chat: { shape: 'circle', colors: ${JSON.stringify(colors.chat)} } };
+    var rt = createMurmurationRuntime(host, { states, initialState: 'home', theme: 'dark', renderer: 'canvas2d' });`);
+  const dump = () => app.run('JSON.stringify([rt.theme, rt.activeState])');
+  assert.equal(dump(), '["dark","home"]');
+  app.run("rt.setTheme('light'); rt.transitionTo('chat', 0);");
+  assert.equal(dump(), '["light","chat"]');
+  app.run("rt.update({ colors: { light: { particleColor: '#333333' } } });");
+  app.run("rt.setTheme('dark'); rt.setTheme('bogus');");
+  assert.equal(app.run('rt.theme'), 'dark', 'unknown themes are ignored');
+  assert.equal(app.run('JSON.stringify(states.chat.colors.dark)'), JSON.stringify(colors.chat.dark), 'runtime never mutates the caller\'s states');
+  for (let i = 0; i < 5; i++) app.step(50 * i);
+  app.run('rt.destroy(); rt.setTheme("light");');
+  assert.equal(app.frames.size, 0, 'setTheme after destroy() must not schedule work');
+  const editor = sandbox({ scripts: [...runtimeScripts(), inlineScript(fromDisk('index.html'))] });
+  editor.elements.get('chatBtn').dispatch('click');
+  editor.elements.get('darkBtn').dispatch('click');
+  const input = editor.elements.get('particleColor'); input.value = '#abcdef'; input.dispatch('input', input);
+  editor.elements.get('homeBtn').dispatch('click');
+  editor.elements.get('lightBtn').dispatch('click');
+  const saved = JSON.parse(editor.run('JSON.stringify(sharedPreviewState())'));
+  assert.equal(saved.version, 3);
+  assert.equal(saved.states.response.colors.dark.particleColor, '#abcdef');
+  assert.equal(saved.states.information.colors.dark.particleColor, '#737373', 'other screens keep their own colors');
+  assert.deepEqual(Object.keys(saved.states.information).sort(), ['axis', 'centerAttenuation', 'colors', 'crest', 'depth', 'fade', 'formationScale', 'grain', 'particleSize', 'particles', 'rotation', 'scatter', 'shape', 'speed', 'spread']);
+  console.log('PASS: per-theme colors resolve per screen, survive switching, and the editor config exposes only public keys');
+}
+
 // ---- Lifecycle -----------------------------------------------------------------------------------
 {
   const editor = sandbox({ scripts: [...runtimeScripts(), inlineScript(fromDisk('index.html'))] });
   const initialListeners = editor.registrations.size;
   for (let cycle = 0; cycle < 30; cycle++) {
-    editor.elements.get('responseToggle').dispatch('click');
+    editor.elements.get(cycle % 2 ? 'homeBtn' : 'chatBtn').dispatch('click');
+    editor.elements.get(cycle % 2 ? 'lightBtn' : 'darkBtn').dispatch('click');
     editor.step(10000);
     const speed = editor.elements.get('speed');
     speed.value = 0.55;

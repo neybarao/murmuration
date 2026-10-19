@@ -19,7 +19,7 @@ export function createMurmurationBackground(el, {
 `;
 }
 
-function buildMurmurationSnippet({ states, transitionDuration }) {
+function buildMurmurationSnippet({ states, transitionDuration, theme = 'light' }) {
   return `<div id="murmuration-bg"></div>
 <script type="module">
   import { createMurmurationBackground } from "./murmuration-background.js";
@@ -27,10 +27,11 @@ function buildMurmurationSnippet({ states, transitionDuration }) {
 
   const murmuration = createMurmurationBackground(
     document.querySelector("#murmuration-bg"),
-    { states, initialState: "home", transitionDuration: ${transitionDuration} }
+    { states, initialState: "home", transitionDuration: ${transitionDuration}, theme: "${theme}" }
   );
 
-  // When the application changes state:
+  // When the application changes screen or theme ("light" or "dark"):
+  // murmuration.setTheme("dark");
   // murmuration.transitionTo("chat");
 
   // Register additional collections when needed:

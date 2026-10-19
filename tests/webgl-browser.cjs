@@ -1,7 +1,7 @@
 const assert = require('node:assert/strict');
 const { chromium } = require('playwright');
 (async () => {
-  const browser = await chromium.launch({ headless: true, channel: 'chrome' });
+  const browser = await chromium.launch({ headless: true, executablePath: process.env.CHROME_BIN || undefined, channel: process.env.CHROME_BIN ? undefined : 'chrome', args: ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist'] });
   try {
     for (const viewport of [{ width: 1440, height: 900 }, { width: 390, height: 844 }]) {
       const page = await browser.newPage({ viewport });
@@ -32,11 +32,11 @@ const { chromium } = require('playwright');
         await page.waitForTimeout(50);
         assert.equal((await pixels()).error, 0);
       }
-      await page.locator('#themeToggle').click();
+      await page.locator('#darkBtn').click();
       await page.waitForTimeout(100);
       assert.equal((await pixels()).error, 0);
-      await page.locator('#themeToggle').click();
-      await page.locator('#responseToggle').click();
+      await page.locator('#lightBtn').click();
+      await page.locator('#chatBtn').click();
       await page.waitForTimeout(400);
       await page.locator('#shape').selectOption('circle');
       await page.screenshot({ path: `/tmp/murmuration-webgl-${viewport.width}.png` });
