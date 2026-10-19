@@ -247,6 +247,31 @@ const percentile = (values, fraction) => [...values].sort((a, b) => a - b)[Math.
   console.log('PASS: circle is a round ring with an empty center, with and without ambient particles');
 }
 {
+  // Circle at the Chat settings (large ring, many ambient particles): the halo must not pile up
+  // along an invisible rectangle inset from the viewport edges.
+  const app = bootRuntime();
+  app.run('bg.update({ shape: "circle", formationScale: 1.35, spread: 1.15, scatter: 0.62, ambientParticles: 0.48, coverage: 0.9 });');
+  for (let i = 0; i < 400; i++) app.step();
+  // A ring that crosses the line naturally has similar density on both sides of it; a clamp shows
+  // up as a spike on the line itself. Compare the line's band with the bands just beside it.
+  let worst = 0;
+  for (let frame = 0; frame < 3; frame++) {
+    const points = frameOf(app, 20);
+    const band = (axis, edge, offset) => {
+      let count = 0;
+      for (let i = axis; i < points.length; i += 2) if (Math.abs(points[i] - (edge + offset)) < 3) count++;
+      return count;
+    };
+    for (const [axis, edge] of [[0, 1280 * .03], [0, 1280 * .97], [1, 720 * .03], [1, 720 * .97]]) {
+      const line = band(axis, edge, 0);
+      const beside = (band(axis, edge, -12) + band(axis, edge, 12) + band(axis, edge, -20) + band(axis, edge, 20)) / 4;
+      worst = Math.max(worst, line / Math.max(beside, 20));
+    }
+  }
+  assert(worst < 2.5, `particles pile up on an inset edge line (${worst.toFixed(1)}x the density beside it)`);
+  console.log('PASS: circle halo does not accumulate along an inset viewport boundary');
+}
+{
   // Swoop: a cloud that wanders, wheels and breathes instead of tracing a fixed curve.
   const app = bootRuntime();
   app.run('bg.update({ shape: "swoop", ambientParticles: 0, speed: 2 });');

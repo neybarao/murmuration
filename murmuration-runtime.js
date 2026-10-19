@@ -195,9 +195,18 @@ function createMurmurationRuntime(el, {
         // Each ambient particle orbits near its own bearing. Retargets only hop a short angle, so
         // their paths never cut across the empty middle of the ring.
         const angle = staticRandom[index * 8 + 3] * Math.PI * 2 + t * .00022 + (ax - .5) * .6;
-        const radius = haloRadius * (1.08 + ay * .9);
-        out.x = clamp(centerX + Math.cos(angle) * radius + driftX * .5, w * .03, w * .97);
-        out.y = clamp(centerY + Math.sin(angle) * radius + driftY * .5, h * .03, h * .97);
+        const cos = Math.cos(angle), sin = Math.sin(angle);
+        // Distance from the center to the viewport edge along this bearing (inset 4%). Fitting the
+        // band into it avoids clamping, which would pile particles up along an invisible rectangle.
+        const reach = Math.min(
+          Math.abs(cos) > 1e-4 ? (cos > 0 ? w * .96 - centerX : centerX - w * .04) / Math.abs(cos) : Infinity,
+          Math.abs(sin) > 1e-4 ? (sin > 0 ? h * .96 - centerY : centerY - h * .04) / Math.abs(sin) : Infinity
+        );
+        const inner = Math.min(haloRadius * 1.08, reach * .55);
+        const outer = Math.min(haloRadius * 1.98, reach * .92);
+        const radius = inner + ay * (outer - inner);
+        out.x = centerX + cos * radius + driftX * .25;
+        out.y = centerY + sin * radius + driftY * .25;
         return out;
       }
       out.x = w * (.08 + ax * .84) + driftX;

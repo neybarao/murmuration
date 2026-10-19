@@ -384,6 +384,18 @@
       font: 11px/1.5 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
     }
 
+    .link-field {
+      width: 100%;
+      margin-top: 10px;
+      min-height: 32px;
+      padding: 0 10px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: var(--field);
+      color: var(--ink);
+      font: 11px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    }
+
     .status {
       min-height: 18px;
       margin: 10px 0 0;
@@ -511,6 +523,7 @@
           <button id="downloadBtn" class="btn" type="button">Download JS</button>
           <button id="copyPreviewBtn" class="btn" type="button">Copy preview link</button>
         </div>
+        <input id="linkField" class="link-field" type="text" readonly hidden aria-label="Preview link">
         <p class="status" id="status" role="status" aria-live="polite"></p>
       </section>
     </aside>
@@ -538,6 +551,7 @@
     const downloadBtn = el("downloadBtn");
     const copyPreviewBtn = el("copyPreviewBtn");
     const transitionInput = el("transitionDuration");
+    const linkField = el("linkField");
 
     // Only these parameters are part of a saved state, the exported config and the share link.
     // Everything else the runtime supports keeps its built-in default.
@@ -684,13 +698,67 @@
       }, 2600);
     }
 
-    async function copyText(text, label) {
+    // Clipboard access can be blocked inside an embedded frame, so fall back to a selection copy and,
+    // as a last resort, show the text in a field the person can copy by hand.
+    function legacyCopy(text) {
+      const area = document.createElement("textarea");
+      area.value = text;
+      area.setAttribute("readonly", "");
+      area.style.position = "fixed";
+      area.style.opacity = "0";
+      document.body.appendChild(area);
+      area.select();
+      let done = false;
+      try { done = document.execCommand("copy"); } catch (error) { done = false; }
+      area.remove();
+      return done;
+    }
+
+    async function copyText(text, label, field) {
+      if (field) { field.hidden = true; }
+      let done = false;
       try {
         await navigator.clipboard.writeText(text);
-        announce(`${label} copied.`);
+        done = true;
       } catch (error) {
-        announce(`Could not copy the ${label.toLowerCase()}. Select the text and copy it manually.`, true);
+        done = legacyCopy(text);
       }
+      if (done) {
+        announce(`${label} copied.`);
+        return;
+      }
+      if (field) {
+        field.value = text;
+        field.hidden = false;
+        field.focus();
+        field.select();
+      }
+      announce(`The browser blocked copying. Select the ${label.toLowerCase()} below and copy it.`, true);
+    }
+
+    async function saveModule() {
+      const source = exportedModule();
+      let saver = null;
+      try { saver = window.claude && window.claude.use ? await window.claude.use("downloads") : null; } catch (error) { saver = null; }
+      if (saver) {
+        // The published page cannot trigger a browser download; the platform asks the viewer instead,
+        // and only accepts certain extensions, so the file is saved as .txt to rename to .js.
+        try {
+          await saver.save({ filename: "murmuration-background.js.txt", data: source });
+          announce("Saved murmuration-background.js.txt. Rename it to murmuration-background.js.");
+        } catch (error) {
+          if (!error || error.code !== "declined") announce("Could not save the file. Use Copy for the snippet instead.", true);
+        }
+        return;
+      }
+      const blob = new Blob([source], { type: "text/javascript" });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = "murmuration-background.js";
+      link.click();
+      URL.revokeObjectURL(url);
+      announce("Downloaded murmuration-background.js.");
     }
 
     function controlMarkup(group) {
@@ -833,18 +901,9 @@
     });
 
     copyBtn.addEventListener("click", () => copyText(exportCode.value, "Snippet"));
-    copyPreviewBtn.addEventListener("click", () => copyText(getPreviewUrl(), "Preview link"));
+    copyPreviewBtn.addEventListener("click", () => copyText(getPreviewUrl(), "Preview link", linkField));
 
-    downloadBtn.addEventListener("click", () => {
-      const blob = new Blob([exportedModule()], { type: "text/javascript" });
-      const url = URL.createObjectURL(blob);
-      const link = document.createElement("a");
-      link.href = url;
-      link.download = "murmuration-background.js";
-      link.click();
-      URL.revokeObjectURL(url);
-      announce("Downloaded murmuration-background.js.");
-    });
+    downloadBtn.addEventListener("click", saveModule);
 
     refreshExport();
     updateReadout();
