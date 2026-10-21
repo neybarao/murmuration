@@ -38,7 +38,7 @@ field.transitionTo('chat');   // smooth transition
 field.setTheme('dark');
 ```
 
-## Video export (experimental, branch v2/video-export)
+## Video export
 
 **Export video** records one loop of the selected screen in the current theme. Only the animation is
 recorded: a separate off-screen runtime renders at the chosen size, so no editor UI appears.
@@ -48,7 +48,10 @@ recorded: a separate off-screen runtime renders at the chosen size, so no editor
 | Frame by frame | WebCodecs `VideoEncoder` encodes each frame at an exact loop position; `vendor/mp4-muxer.js` (5.2.2, MIT, deprecated upstream in favour of Mediabunny) writes the MP4. | H.264 MP4, or VP9 in MP4 where H.264 encoding is unavailable. Exact frame count, seamless loop, any size. |
 | Real time | `canvas.captureStream()` + `MediaRecorder` while the loop plays. | MP4 or WebM depending on the browser. Timing follows the machine. |
 
-Sizes: 1280×720, 1920×1080, 3840×2160 (CSS 1920×1080 at pixel ratio 2), 1080×1920, 1080×1080.
+Sizes: desktop 1280×720, 1920×1080, 3840×2160 (CSS 1920×1080 at pixel ratio 2); mobile iPhone 16
+1180×2556 (CSS 393×852 at 3×, width rounded to even), iPhone 16 Pro Max 1290×2796 (430×932 at 3×),
+Android 1080×2400 (411×914 at 2.625×), iPad Air 1640×2360 (820×1180 at 2×); social 1080×1920, 1080×1080.
+Mobile sizes render at the device's CSS size and pixel ratio, so the video matches what the phone shows.
 
 ## Why it is fast
 

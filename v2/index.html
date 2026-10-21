@@ -388,7 +388,8 @@
 
     // Video export panel.
     const support = videoSupport();
-    $('videoSize').innerHTML = Object.entries(VIDEO_SIZES).map(([key, size]) => `<option value="${key}"${key === '1080p' ? ' selected' : ''}>${size.label}</option>`).join('');
+    $('videoSize').innerHTML = [...new Set(Object.values(VIDEO_SIZES).map(size => size.group))].map(group => `<optgroup label="${group}">` +
+      Object.entries(VIDEO_SIZES).filter(([, size]) => size.group === group).map(([key, size]) => `<option value="${key}"${key === '1080p' ? ' selected' : ''}>${size.label}</option>`).join('') + '</optgroup>').join('');
     let videoAbort = null, videoUrl = '';
     function updateVideoInfo() {
       const method = $('videoMethod').value, fps = Number($('videoFps').value);

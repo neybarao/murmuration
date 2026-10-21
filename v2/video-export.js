@@ -8,12 +8,18 @@
 // - "frames":    WebCodecs renders and encodes every frame at an exact loop position, then mp4-muxer
 //                writes an H.264 MP4. Frame-perfect at any size; needs VideoEncoder support.
 
+// Mobile sizes render at the device's CSS size times its pixel ratio, so balls and framing match what
+// the phone shows. H.264 needs even dimensions, so the iPhone 16 width is rounded from 1179 to 1180.
 const VIDEO_SIZES = {
-  '720p': { label: '1280 × 720', width: 1280, height: 720, pixelRatio: 1 },
-  '1080p': { label: '1920 × 1080', width: 1920, height: 1080, pixelRatio: 1 },
-  '4k': { label: '3840 × 2160 (4K)', width: 3840, height: 2160, pixelRatio: 2 },
-  vertical: { label: '1080 × 1920 (vertical)', width: 1080, height: 1920, pixelRatio: 1 },
-  square: { label: '1080 × 1080 (square)', width: 1080, height: 1080, pixelRatio: 1 }
+  '720p': { group: 'Desktop', label: '1280 × 720', width: 1280, height: 720, pixelRatio: 1 },
+  '1080p': { group: 'Desktop', label: '1920 × 1080', width: 1920, height: 1080, pixelRatio: 1 },
+  '4k': { group: 'Desktop', label: '3840 × 2160 (4K)', width: 3840, height: 2160, pixelRatio: 2 },
+  iphone: { group: 'Mobile', label: 'iPhone 16 · 1180 × 2556', width: 1180, height: 2556, pixelRatio: 3 },
+  iphoneMax: { group: 'Mobile', label: 'iPhone 16 Pro Max · 1290 × 2796', width: 1290, height: 2796, pixelRatio: 3 },
+  android: { group: 'Mobile', label: 'Android · 1080 × 2400', width: 1080, height: 2400, pixelRatio: 2.625 },
+  ipad: { group: 'Mobile', label: 'iPad Air · 1640 × 2360', width: 1640, height: 2360, pixelRatio: 2 },
+  vertical: { group: 'Social', label: 'Vertical · 1080 × 1920', width: 1080, height: 1920, pixelRatio: 1 },
+  square: { group: 'Social', label: 'Square · 1080 × 1080', width: 1080, height: 1080, pixelRatio: 1 }
 };
 
 // Dense fields of small dots are hard to compress, so bitrates are generous.
