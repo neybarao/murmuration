@@ -1,0 +1,256 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Ball Field Lab</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --surface: #F6F7F8; --field: #FFFFFF; --field-hover: #EDF0F2; --ink: #16191C; --muted: #59616A;
+      --line: #D3D9DE; --accent: #0B6E7F; --accent-ink: #FFFFFF; --accent-soft: #DCEFF2;
+      --chip: rgba(255, 255, 255, 0.92); --shadow: 0 6px 20px rgba(22, 25, 28, 0.1);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+    }
+    .app[data-theme="dark"] {
+      color-scheme: dark;
+      --surface: #14171A; --field: #1D2125; --field-hover: #292E34; --ink: #E9ECEF; --muted: #A3ABB3;
+      --line: #343B42; --accent: #5CC4D6; --accent-ink: #06222A; --accent-soft: #123740;
+      --chip: rgba(29, 33, 37, 0.92); --shadow: 0 6px 20px rgba(0, 0, 0, 0.45);
+    }
+    * { box-sizing: border-box; }
+    body { margin: 0; background: #FFFFFF; overflow: hidden; }
+    .app {
+      display: grid; grid-template-columns: minmax(0, 1fr) 320px; height: 100dvh;
+      background: var(--surface); color: var(--ink); font-size: 13px;
+    }
+    :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+    .stage { position: relative; min-width: 0; overflow: hidden; isolation: isolate; cursor: grab; touch-action: none; }
+    .hud, .actions {
+      position: absolute; top: 16px; z-index: 2; display: flex; gap: 6px; align-items: center;
+      padding: 2px; border: 1px solid var(--line); border-radius: 10px; background: var(--chip);
+      backdrop-filter: blur(8px); box-shadow: var(--shadow);
+    }
+    .hud { left: 16px; padding: 0 12px; min-height: 34px; color: var(--muted); font-size: 12px; font-variant-numeric: tabular-nums; }
+    .hud b { color: var(--ink); font-weight: 600; }
+    .actions { right: 16px; }
+    button {
+      min-height: 30px; padding: 0 11px; border: 0; border-radius: 8px; background: transparent;
+      color: var(--ink); font: inherit; cursor: pointer;
+    }
+    button:hover { background: var(--field-hover); }
+    button.primary { background: var(--accent); color: var(--accent-ink); }
+    .panel { overflow-y: auto; border-left: 1px solid var(--line); padding: 18px 18px 40px; }
+    .panel h1 { margin: 0 0 2px; font-size: 15px; }
+    .panel .sub { margin: 0 0 14px; color: var(--muted); font-size: 12px; line-height: 1.45; }
+    fieldset { margin: 0 0 12px; padding: 12px 0 0; border: 0; border-top: 1px solid var(--line); }
+    legend { padding: 0 6px 0 0; font-size: 11px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
+    .row { display: grid; grid-template-columns: 1fr auto; gap: 4px 8px; align-items: center; margin-bottom: 10px; }
+    .row label { color: var(--ink); }
+    .row output { color: var(--muted); font-variant-numeric: tabular-nums; font-size: 12px; }
+    .row input[type="range"], .row select { grid-column: 1 / -1; width: 100%; accent-color: var(--accent); }
+    .row select, .row input[type="color"] {
+      min-height: 30px; border: 1px solid var(--line); border-radius: 7px; background: var(--field); color: var(--ink); font: inherit;
+    }
+    .row input[type="color"] { width: 44px; padding: 2px; }
+    .check { display: flex; gap: 8px; align-items: center; margin-bottom: 10px; }
+    .toast {
+      position: absolute; left: 50%; bottom: 20px; z-index: 3; transform: translateX(-50%); padding: 8px 14px;
+      border-radius: 9px; background: var(--ink); color: var(--surface); font-size: 12px; opacity: 0; transition: opacity .2s;
+      pointer-events: none;
+    }
+    .toast.is-visible { opacity: 1; }
+    @media (max-width: 760px) {
+      .app { grid-template-columns: 1fr; grid-template-rows: 55dvh 1fr; }
+      .panel { border-left: 0; border-top: 1px solid var(--line); }
+      .hud { top: auto; bottom: 12px; left: 12px; }
+      .actions { right: 12px; top: 12px; }
+    }
+  </style>
+</head>
+<body>
+  <div class="app" id="app" data-theme="light">
+    <main class="stage" id="stage" aria-label="Ball field preview">
+      <div class="hud" id="hud" aria-live="off"></div>
+      <div class="actions">
+        <button type="button" id="playBtn">Pause</button>
+        <button type="button" id="themeBtn">Dark</button>
+        <button type="button" id="linkBtn">Copy link</button>
+        <button type="button" id="downloadBtn" class="primary">Download JS</button>
+      </div>
+      <div class="toast" id="toast" role="status"></div>
+    </main>
+    <aside class="panel">
+      <h1>Ball Field Lab</h1>
+      <p class="sub">Every animated value uses whole cycle counts, so the loop returns exactly to its start. Scroll or pinch over the preview to zoom.</p>
+      <div id="controls"></div>
+      <button type="button" id="resetBtn">Reset controls</button>
+    </aside>
+  </div>
+
+  <script src="./ball-field-runtime.js"></script>
+  <script src="./ball-field-export.js"></script>
+  <script>
+    const PROPERTY_OPTIONS = [['x', 'X axis'], ['y', 'Y axis'], ['centerX', 'Center-X'], ['centerY', 'Center-Y'], ['radius', 'Radius'], ['random', 'Random'], ['diamond', 'Diamond'], ['rectangle', 'Rectangle'], ['fastTop', 'Fast top']];
+    const AXIS_OPTIONS = [['x', 'X'], ['y', 'Y'], ['z', 'Z'], ['xy', 'XY'], ['xz', 'XZ'], ['yz', 'YZ'], ['xyz', 'XYZ']];
+    const SECTIONS = [
+      ['View', [['zoom', 'Zoom', 0, 100, 0.5, v => (2 ** ((v - 50) / 12.5)).toFixed(2) + '×'], ['tilt', 'Tilt', -90, 90, 1, '°']]],
+      ['Loop', [['playing', 'Play', 'check'], ['loopLength', 'Loop length', 1, 60, 0.5, 's']]],
+      ['Array', [['gridSpacing', 'Grid spacing', 2, 40, 1], ['ballSize', 'Ball size', 1, 200, 1, '%']]],
+      ['Scatter', [['scatter', 'Scatter', 0, 300, 0.5], ['scatterMotion', 'Scatter motion', -720, 720, 1, '°'], ['scatterCycles', 'Scatter motion cycles', -4, 4, 1, '×']]],
+      ['Displace', [['displace', 'Displace', -600, 600, 1], ['displaceProperty', 'Displace property', PROPERTY_OPTIONS], ['displaceSwing', 'Displace swing', 0, 600, 1], ['displaceCycles', 'Displace cycles', 0, 8, 1, '×']]],
+      ['Twist', [['twistAngle', 'Twist angle', -720, 720, 1, '°'], ['twistProperty', 'Twist property', PROPERTY_OPTIONS], ['twistSwing', 'Twist swing', 0, 720, 1, '°'], ['twistCycles', 'Twist cycles', 0, 8, 1, '×']]],
+      ['Rotation', [['rotationAxis', 'Rotation axis', AXIS_OPTIONS], ['rotation', 'Rotation', -360, 360, 0.1, '°'], ['rotationCycles', 'Rotation cycles', -4, 4, 1, '×']]],
+      ['Colors', [['ball', 'Ball', 'color'], ['background', 'Background', 'color']]]
+    ];
+    const $ = id => document.getElementById(id);
+    const app = $('app'), stage = $('stage');
+    const clone = value => JSON.parse(JSON.stringify(value));
+
+    function readLink() {
+      try {
+        const raw = new URLSearchParams(location.hash.slice(1)).get('s');
+        if (!raw) return {};
+        return JSON.parse(decodeURIComponent(escape(atob(raw.replace(/-/g, '+').replace(/_/g, '/')))));
+      } catch { return {}; }
+    }
+    const linked = readLink();
+    let theme = linked.theme === 'dark' ? 'dark' : 'light';
+    let state = { ...clone(BALL_FIELD_DEFAULTS), ...(linked.settings || {}) };
+    state.colors = { ...clone(BALL_FIELD_DEFAULTS.colors), ...(linked.settings && linked.settings.colors) };
+    const params = new URLSearchParams(location.search);
+
+    const runtime = createBallFieldRuntime(stage, {
+      settings: state, theme, respectReducedMotion: false,
+      renderer: params.get('renderer') === 'canvas2d' ? 'canvas2d' : 'webgl2',
+      onFrame: s => { hudStats = s; }
+    });
+    let hudStats = runtime.stats();
+    setInterval(() => {
+      const s = hudStats;
+      $('hud').innerHTML = `<b>${s.balls.toLocaleString('en-US')}</b> balls · <b>${s.playing ? s.fps.toFixed(0) : '–'}</b> fps · ${s.frameCpu.toFixed(2)} ms cpu · ${s.backend}${s.drawn < s.balls ? ` (${s.drawn.toLocaleString('en-US')} drawn)` : ''}`;
+    }, 250);
+
+    const inputs = {};
+    function format(def, value) {
+      const unit = def[5];
+      if (typeof unit === 'function') return unit(value);
+      return `${Number(value)}${unit || ''}`;
+    }
+    function buildControls() {
+      const root = $('controls');
+      for (const [title, defs] of SECTIONS) {
+        const fs = document.createElement('fieldset');
+        fs.innerHTML = `<legend>${title}</legend>`;
+        for (const def of defs) {
+          const [key, label, a] = def;
+          const id = `c-${key}`;
+          let wrap;
+          if (a === 'check') {
+            wrap = document.createElement('label'); wrap.className = 'check';
+            wrap.innerHTML = `<input type="checkbox" id="${id}"> ${label}`;
+          } else {
+            wrap = document.createElement('div'); wrap.className = 'row';
+            if (Array.isArray(a)) {
+              wrap.innerHTML = `<label for="${id}">${label}</label><span></span><select id="${id}">${a.map(([v, t]) => `<option value="${v}">${t}</option>`).join('')}</select>`;
+            } else if (a === 'color') {
+              wrap.innerHTML = `<label for="${id}">${label}</label><input type="color" id="${id}">`;
+            } else {
+              wrap.innerHTML = `<label for="${id}">${label}</label><output id="${id}-out"></output><input type="range" id="${id}" min="${a}" max="${def[3]}" step="${def[4]}">`;
+            }
+          }
+          fs.appendChild(wrap);
+          const input = wrap.querySelector('input,select');
+          inputs[key] = { def, input };
+          input.addEventListener('input', () => onInput(key));
+        }
+        root.appendChild(fs);
+      }
+    }
+    function onInput(key) {
+      const { def, input } = inputs[key];
+      if (def[2] === 'check') state[key] = input.checked;
+      else if (def[2] === 'color') state.colors[theme][key] = input.value;
+      else if (Array.isArray(def[2])) state[key] = input.value;
+      else { state[key] = Number(input.value); $(`c-${key}-out`).textContent = format(def, state[key]); }
+      runtime.update(state);
+      if (key === 'playing') syncPlay();
+      scheduleLink();
+    }
+    function syncControls() {
+      for (const [key, { def, input }] of Object.entries(inputs)) {
+        if (def[2] === 'check') input.checked = !!state[key];
+        else if (def[2] === 'color') input.value = state.colors[theme][key];
+        else { input.value = state[key]; const out = $(`c-${key}-out`); if (out) out.textContent = format(def, state[key]); }
+      }
+      syncPlay();
+    }
+    function syncPlay() { $('playBtn').textContent = state.playing ? 'Pause' : 'Play'; }
+    function applyTheme() {
+      app.dataset.theme = theme;
+      $('themeBtn').textContent = theme === 'dark' ? 'Light' : 'Dark';
+      runtime.setTheme(theme);
+      syncControls();
+    }
+
+    let linkTimer = 0;
+    function shareUrl() {
+      const json = JSON.stringify({ v: 1, theme, settings: state });
+      const encoded = btoa(unescape(encodeURIComponent(json))).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+      return `${location.origin}${location.pathname}${location.search}#s=${encoded}`;
+    }
+    function scheduleLink() {
+      clearTimeout(linkTimer);
+      linkTimer = setTimeout(() => { try { history.replaceState(null, '', shareUrl()); } catch {} }, 300);
+    }
+    function toast(text) {
+      const el = $('toast'); el.textContent = text; el.classList.add('is-visible');
+      clearTimeout(toast.t); toast.t = setTimeout(() => el.classList.remove('is-visible'), 1600);
+    }
+
+    $('playBtn').onclick = () => { state.playing = !state.playing; runtime.update(state); syncControls(); scheduleLink(); };
+    $('themeBtn').onclick = () => { theme = theme === 'dark' ? 'light' : 'dark'; applyTheme(); scheduleLink(); };
+    $('resetBtn').onclick = () => { state = clone(BALL_FIELD_DEFAULTS); runtime.update(state); syncControls(); scheduleLink(); };
+    $('linkBtn').onclick = async () => {
+      try { await navigator.clipboard.writeText(shareUrl()); toast('Link copied'); }
+      catch { toast('Copy failed: use the address bar'); }
+    };
+    $('downloadBtn').onclick = () => {
+      const blob = new Blob([buildBallFieldModule(state)], { type: 'text/javascript' });
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob); a.download = 'ball-field-background.js';
+      document.body.appendChild(a); a.click(); a.remove();
+      setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+      toast('Downloaded ball-field-background.js');
+    };
+
+    // Wheel and pinch zoom over the preview.
+    function setZoom(value) {
+      state.zoom = Math.min(100, Math.max(0, value));
+      runtime.update({ zoom: state.zoom });
+      inputs.zoom.input.value = state.zoom;
+      $('c-zoom-out').textContent = format(inputs.zoom.def, state.zoom);
+      scheduleLink();
+    }
+    stage.addEventListener('wheel', event => { event.preventDefault(); setZoom(state.zoom - event.deltaY * 0.02); }, { passive: false });
+    const pointers = new Map(); let pinch = 0;
+    stage.addEventListener('pointerdown', e => { pointers.set(e.pointerId, e); stage.setPointerCapture(e.pointerId); });
+    stage.addEventListener('pointermove', e => {
+      if (!pointers.has(e.pointerId)) return;
+      pointers.set(e.pointerId, e);
+      if (pointers.size === 2) {
+        const [a, b] = [...pointers.values()];
+        const d = Math.hypot(a.clientX - b.clientX, a.clientY - b.clientY);
+        if (pinch) setZoom(state.zoom + (d - pinch) * 0.08);
+        pinch = d;
+      }
+    });
+    const release = e => { pointers.delete(e.pointerId); pinch = 0; };
+    stage.addEventListener('pointerup', release);
+    stage.addEventListener('pointercancel', release);
+
+    buildControls();
+    applyTheme();
+  </script>
+</body>
+</html>
