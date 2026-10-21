@@ -18,6 +18,7 @@ const BALL_FIELD_EFFECTS = Object.freeze({
     loopLength: 30,        // seconds
     gridSpacing: 2,        // world units between balls; the field is 520 units wide, so 2 = 260 x 260 balls
     ballSize: 6,           // diameter as a share of the grid spacing: 25 = touching
+    maxBallSize: 2.5,      // largest on-screen diameter in CSS pixels, so balls passing the camera stay small
     scatter: 9,            // world units
     scatterMotion: 360,    // degrees each ball orbits its scatter point
     scatterCycles: 1,
@@ -45,6 +46,7 @@ const BALL_FIELD_EFFECTS = Object.freeze({
     loopLength: 30,
     gridSpacing: 2,
     ballSize: 22,
+    maxBallSize: 7,
     scatter: 9,
     scatterMotion: 360,
     scatterCycles: 1,
@@ -183,6 +185,7 @@ function createBallFieldRuntime(el, options = {}) {
       phase,
       rot: multiply(tilt, spin),
       ballSize: Math.max(0.01, s.ballSize / 25) * spacing,
+      maxBall: Math.max(0.5, Number(s.maxBallSize) || 4) * ratio,
       scatter: [s.scatter, s.scatterMotion * deg, Math.round(s.scatterCycles)],
       displace: [s.displace, s.displaceSwing, Math.round(s.displaceCycles), Math.max(0, PROPERTIES.indexOf(s.displaceProperty))],
       twist: [s.twistAngle * deg, s.twistSwing * deg, Math.round(s.twistCycles), Math.max(0, PROPERTIES.indexOf(s.twistProperty))]
@@ -201,7 +204,7 @@ function createBallFieldRuntime(el, options = {}) {
       precision highp float;
       precision highp int;
       uniform int side, mode;
-      uniform float spacing, phase, camDist, focal, ballSize;
+      uniform float spacing, phase, camDist, focal, ballSize, maxBall;
       uniform vec2 viewport;
       uniform mat3 rot;
       uniform vec3 scatterP;
@@ -271,7 +274,8 @@ function createBallFieldRuntime(el, options = {}) {
         vec3 q = rot * p;
         float depth = camDist - q.z;
         if (depth < 1.) { gl_Position = vec4(2., 2., 2., 1.); return; }
-        float diameter = ballSize * focal / depth;
+        // Soft cap: small balls keep their perspective size, balls near the camera ease towards maxBall.
+        float diameter = maxBall * tanh(ballSize * focal / depth / maxBall);
         float d = max(diameter, 1.);
         coverage = min(diameter, 1.) * min(diameter, 1.);
         halfPx = d * .5;
@@ -311,7 +315,7 @@ function createBallFieldRuntime(el, options = {}) {
       gl.deleteShader(vs); gl.deleteShader(fs);
       if (!gl.getProgramParameter(program, gl.LINK_STATUS)) throw Error(gl.getProgramInfoLog(program));
       vao = gl.createVertexArray(); // no attributes: everything comes from gl_InstanceID
-      for (const name of ['side', 'mode', 'spacing', 'phase', 'camDist', 'focal', 'ballSize', 'viewport', 'rot', 'scatterP', 'displaceP', 'twistP', 'color', 'highlight']) {
+      for (const name of ['side', 'mode', 'spacing', 'phase', 'camDist', 'focal', 'ballSize', 'maxBall', 'viewport', 'rot', 'scatterP', 'displaceP', 'twistP', 'color', 'highlight']) {
         u[name] = gl.getUniformLocation(program, name);
       }
       gl.enable(gl.BLEND);
@@ -342,6 +346,7 @@ function createBallFieldRuntime(el, options = {}) {
         gl.uniform1f(u.camDist, fp.camDist);
         gl.uniform1f(u.focal, fp.focal);
         gl.uniform1f(u.ballSize, fp.ballSize);
+        gl.uniform1f(u.maxBall, fp.maxBall);
         gl.uniform2f(u.viewport, canvas.width, canvas.height);
         gl.uniform3f(u.scatterP, ...fp.scatter);
         gl.uniform4f(u.displaceP, ...fp.displace);
@@ -414,7 +419,7 @@ function createBallFieldRuntime(el, options = {}) {
           const qx = m[0] * x + m[1] * y + m[2] * z, qy = m[3] * x + m[4] * y + m[5] * z, qz = m[6] * x + m[7] * y + m[8] * z;
           const depth = fp.camDist - qz;
           if (depth < 1) continue;
-          const d = Math.max(1, size * fp.focal / depth);
+          const d = Math.max(1, fp.maxBall * Math.tanh(size * fp.focal / depth / fp.maxBall));
           const px = cx + qx * fp.focal / depth, py = cy - qy * fp.focal / depth;
           if (px + d < 0 || py + d < 0 || px - d > cw || py - d > ch) continue;
           ctx.fillRect(px - d / 2, py - d / 2, d, d);
