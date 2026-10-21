@@ -87,6 +87,13 @@ const check = (ok, label) => { console.log(`${ok ? 'PASS' : 'FAIL'}: ${label}`);
     await page.click('#fullBtn');
     await page.click('#themeBtn');
 
+    // Effect selector: Organic loads its own preset and renders.
+    await page.selectOption('#c-effect', 'organic');
+    await page.waitForTimeout(300);
+    const organic = await page.evaluate(() => [state.effect, state.tilt, runtime.settings.effect, runtime.stats().balls]);
+    check(organic[0] === 'organic' && organic[1] === 55 && organic[2] === 'organic', `Organic effect loads its preset (${organic.join(', ')})`);
+    await page.selectOption('#c-effect', 'ballAction');
+
     // Share link round trip.
     await page.evaluate(() => { state.twistAngle = 123; state.gridSpacing = 7; runtime.update(state); });
     const link = await page.evaluate(() => shareUrl());

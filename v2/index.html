@@ -102,7 +102,9 @@
   <script>
     const PROPERTY_OPTIONS = [['x', 'X axis'], ['y', 'Y axis'], ['centerX', 'Center-X'], ['centerY', 'Center-Y'], ['radius', 'Radius'], ['random', 'Random'], ['diamond', 'Diamond'], ['rectangle', 'Rectangle'], ['fastTop', 'Fast top']];
     const AXIS_OPTIONS = [['x', 'X'], ['y', 'Y'], ['z', 'Z'], ['xy', 'XY'], ['xz', 'XZ'], ['yz', 'YZ'], ['xyz', 'XYZ']];
+    const EFFECT_OPTIONS = Object.entries(BALL_FIELD_EFFECTS).map(([key, preset]) => [key, preset.label]);
     const SECTIONS = [
+      ['Effect', [['effect', 'Effect', EFFECT_OPTIONS]]],
       ['View', [['zoom', 'Zoom', 0, 100, 0.5, v => (2 ** ((v - 50) / 12.5)).toFixed(2) + '×'], ['tilt', 'Tilt', -90, 90, 1, '°']]],
       ['Loop', [['playing', 'Play', 'check'], ['loopLength', 'Loop length', 1, 60, 0.5, 's']]],
       ['Array', [['gridSpacing', 'Grid spacing', 2, 40, 1], ['ballSize', 'Ball size', 1, 200, 1]]],
@@ -180,6 +182,7 @@
       const { def, input } = inputs[key];
       if (def[2] === 'check') state[key] = input.checked;
       else if (def[2] === 'color') state.colors[theme][key] = input.value;
+      else if (key === 'effect') { applyEffect(input.value); return; }
       else if (Array.isArray(def[2])) state[key] = input.value;
       else { state[key] = Number(input.value); $(`c-${key}-out`).textContent = format(def, state[key]); }
       runtime.update(state);
@@ -224,7 +227,14 @@
     };
     $('playBtn').onclick = () => { state.playing = !state.playing; runtime.update(state); syncControls(); scheduleLink(); };
     $('themeBtn').onclick = () => { theme = theme === 'dark' ? 'light' : 'dark'; applyTheme(); scheduleLink(); };
-    $('resetBtn').onclick = () => { state = clone(BALL_FIELD_DEFAULTS); runtime.update(state); syncControls(); scheduleLink(); };
+    // Switching effect loads that effect's preset; colors and play state stay as they are.
+    function applyEffect(name) {
+      const preset = { ...BALL_FIELD_EFFECTS[name] || BALL_FIELD_EFFECTS.ballAction };
+      delete preset.label;
+      state = { ...state, ...preset, effect: name };
+      runtime.update(state); syncControls(); scheduleLink();
+    }
+    $('resetBtn').onclick = () => applyEffect(state.effect);
     $('linkBtn').onclick = async () => {
       try { await navigator.clipboard.writeText(shareUrl()); toast('Link copied'); }
       catch { toast('Copy failed: use the address bar'); }

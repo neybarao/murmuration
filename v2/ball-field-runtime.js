@@ -6,31 +6,66 @@
 //
 // Self-containment rule (same as v1): Download JS serializes BALL_FIELD_DEFAULTS and
 // createBallFieldRuntime with Function.prototype.toString(), so this function may reference only
-// itself, BALL_FIELD_DEFAULTS and browser globals.
+// itself, BALL_FIELD_EFFECTS, BALL_FIELD_DEFAULTS and browser globals.
+
+// Each effect is a full preset. "ballAction" reproduces the reference prototype (values measured from
+// its draw calls); "organic" is the first v2 motion: travelling waves and a twist around the vertical axis.
+const BALL_FIELD_EFFECTS = Object.freeze({
+  ballAction: Object.freeze({
+    label: 'Ball Action',
+    zoom: 50,              // 0..100, 50 = the flat sheet covers the screen; high values put the camera inside the field
+    tilt: 0,               // degrees the top of the sheet leans away before rotation
+    loopLength: 30,        // seconds
+    gridSpacing: 2,        // world units between balls; the field is 520 units wide, so 2 = 260 x 260 balls
+    ballSize: 6,           // diameter as a share of the grid spacing: 25 = touching
+    scatter: 9,            // world units
+    scatterMotion: 360,    // degrees each ball orbits its scatter point
+    scatterCycles: 1,
+    // Displace and twist: value = (static + swing * sin(cycles * loop)) * property. The property is 0..1
+    // across the sheet; Center-X falls linearly from 1 on the vertical centre line to 0 at the side edges.
+    displace: 0,           // world units towards the viewer
+    displaceProperty: 'centerX',
+    displaceSwing: 75,     // world units
+    displaceCycles: 1,
+    twistAngle: 6,         // degrees each row turns around the horizontal axis (top edge away from the viewer)
+    twistProperty: 'centerX',
+    twistSwing: 360,       // degrees
+    twistCycles: 1,
+    rotationAxis: 'x',
+    rotation: 0,           // degrees, static offset
+    rotationCycles: 1      // whole turns per loop; positive tips the top (X) or the right edge (Y) away
+  }),
+  organic: Object.freeze({
+    label: 'Organic',
+    // Displace and twist travel across the sheet: value = static * p + swing * sin(cycles * loop - p * 2π),
+    // with p = distance from the centre line (0 in the middle, 1 at the edges). Twist turns around the
+    // vertical axis.
+    zoom: 53,              // a little closer than Ball Action so the tilted sheet still reaches the edges
+    tilt: 55,
+    loopLength: 30,
+    gridSpacing: 2,
+    ballSize: 22,
+    scatter: 9,
+    scatterMotion: 360,
+    scatterCycles: 1,
+    displace: 0,
+    displaceProperty: 'centerX',
+    displaceSwing: 75,
+    displaceCycles: 1,
+    twistAngle: 6,
+    twistProperty: 'centerX',
+    twistSwing: 120,
+    twistCycles: 1,
+    rotationAxis: 'x',
+    rotation: 0,
+    rotationCycles: 1
+  })
+});
 
 const BALL_FIELD_DEFAULTS = Object.freeze({
-  zoom: 50,              // 0..100, 50 = the flat sheet covers the screen; high values put the camera inside the field
-  tilt: 0,               // degrees the top of the sheet leans away before rotation
+  effect: 'ballAction',
   playing: true,
-  loopLength: 30,        // seconds
-  gridSpacing: 2,        // world units between balls; the field is 520 units wide, so 2 = 260 x 260 balls
-  ballSize: 6,           // diameter as a share of the grid spacing: 25 = touching
-  scatter: 9,            // world units
-  scatterMotion: 360,    // degrees each ball orbits its scatter point
-  scatterCycles: 1,
-  // Displace and twist: value = (static + swing * sin(cycles * loop)) * property. The property is 0..1
-  // across the sheet; Center-X falls linearly from 1 on the vertical centre line to 0 at the side edges.
-  displace: 0,           // world units towards the viewer
-  displaceProperty: 'centerX',
-  displaceSwing: 75,     // world units
-  displaceCycles: 1,
-  twistAngle: 6,         // degrees each row turns around the horizontal axis (top edge away from the viewer)
-  twistProperty: 'centerX',
-  twistSwing: 360,       // degrees
-  twistCycles: 1,
-  rotationAxis: 'x',
-  rotation: 0,           // degrees, static offset
-  rotationCycles: 1,     // whole turns per loop; positive tips the top (X) or the right edge (Y) away
+  ...BALL_FIELD_EFFECTS.ballAction,
   colors: {
     light: { ball: '#111111', background: '#FFFFFF' },
     dark: { ball: '#EDEDED', background: '#0E1012' }
@@ -43,7 +78,8 @@ function createBallFieldRuntime(el, options = {}) {
   const FIELD = 520, HALF = FIELD / 2, TAU = Math.PI * 2;
   // Camera distance at zoom 1 in half-field units (measured from the reference: about 2.4), and how far
   // the flat sheet bleeds past the screen edge in cover mode.
-  const PERSPECTIVE = 2.4, BLEED = 0.96;
+  // Organic keeps the first v2 camera: a 40° field of view with 30% margin, about 3.57 half-fields away.
+  const PERSPECTIVE = { ballAction: 2.4, organic: 1.3 / Math.tan(20 * Math.PI / 180) }, BLEED = 0.96;
   const FALLBACK_MAX_BALLS = 9000;
   const {
     renderer = 'webgl2', theme = 'light', maxPixelRatio = 2, fit = 'cover',
@@ -57,6 +93,7 @@ function createBallFieldRuntime(el, options = {}) {
 
   function mergeSettings(base, next) {
     const out = { ...base, ...next };
+    delete out.label;
     out.colors = {
       light: { ...base.colors.light, ...(next.colors && next.colors.light) },
       dark: { ...base.colors.dark, ...(next.colors && next.colors.dark) }
@@ -77,6 +114,19 @@ function createBallFieldRuntime(el, options = {}) {
     return (x ^ (x >>> 16)) >>> 0;
   }
   const rand = (id, k) => hash((Math.imul(id, 4) + k) >>> 0) / 4294967295;
+  function organicProperty(index, nx, ny, r) {
+    switch (index) {
+      case 0: return nx * 0.5 + 0.5;
+      case 1: return ny * 0.5 + 0.5;
+      case 2: return Math.abs(nx);
+      case 3: return Math.abs(ny);
+      case 4: return Math.min(Math.hypot(nx, ny) / Math.SQRT2, 1);
+      case 5: return r;
+      case 6: return (Math.abs(nx) + Math.abs(ny)) * 0.5;
+      case 7: return Math.max(Math.abs(nx), Math.abs(ny));
+      default: return Math.pow(ny * 0.5 + 0.5, 3);
+    }
+  }
   function property(index, nx, ny, r) {
     switch (index) {
       case 0: return nx * 0.5 + 0.5;
@@ -112,21 +162,24 @@ function createBallFieldRuntime(el, options = {}) {
     const s = settings;
     const spacing = Math.max(0.5, s.gridSpacing);
     const side = Math.max(1, Math.floor(FIELD / spacing + 1e-6));
+    const organic = s.effect === 'organic';
+    const perspective = organic ? PERSPECTIVE.organic : PERSPECTIVE.ballAction;
     const zoomFactor = Math.pow(2, (s.zoom - 50) / 12.5);
     const phase = progress * TAU;
     // The X component is mirrored so a positive angle tips the top away (X) and the right edge away (Y),
     // as in the reference.
     const axis = AXES[s.rotationAxis] || AXES.x;
-    const spin = axisRotation([-axis[0], axis[1], axis[2]], s.rotation * Math.PI / 180 + Math.round(s.rotationCycles) * phase);
+    const angle = s.rotation * Math.PI / 180 + Math.round(s.rotationCycles) * phase;
+    const spin = organic ? axisRotation(axis, -angle) : axisRotation([-axis[0], axis[1], axis[2]], angle);
     // "cover": the flat sheet seen head-on fills the larger screen side, like background-size: cover.
     const screenHalf = (fit === 'contain' ? Math.min(width, height) : Math.max(width, height)) * ratio * 0.5;
     const tilt = axisRotation([-1, 0, 0], s.tilt * Math.PI / 180);
     const deg = Math.PI / 180;
     return {
-      side, count: side * side,
+      side, count: side * side, mode: organic ? 1 : 0,
       spacing,
-      camDist: HALF * PERSPECTIVE / zoomFactor,
-      focal: screenHalf * PERSPECTIVE / BLEED,
+      camDist: HALF * perspective / zoomFactor,
+      focal: screenHalf * perspective / BLEED,
       phase,
       rot: multiply(tilt, spin),
       ballSize: Math.max(0.01, s.ballSize / 25) * spacing,
@@ -147,7 +200,7 @@ function createBallFieldRuntime(el, options = {}) {
     const vertex = `#version 300 es
       precision highp float;
       precision highp int;
-      uniform int side;
+      uniform int side, mode;
       uniform float spacing, phase, camDist, focal, ballSize;
       uniform vec2 viewport;
       uniform mat3 rot;
@@ -158,6 +211,17 @@ function createBallFieldRuntime(el, options = {}) {
       const float TAU = 6.28318530718;
       uint hash(uint x) { x ^= x >> 16; x *= 0x7feb352du; x ^= x >> 15; x *= 0x846ca68bu; x ^= x >> 16; return x; }
       float rand(uint id, uint k) { return float(hash(id * 4u + k)) / 4294967295.0; }
+      float organicProperty(int i, vec2 n, float r) {
+        if (i == 0) return n.x * .5 + .5;
+        if (i == 1) return n.y * .5 + .5;
+        if (i == 2) return abs(n.x);
+        if (i == 3) return abs(n.y);
+        if (i == 4) return min(length(n) / 1.41421356, 1.);
+        if (i == 5) return r;
+        if (i == 6) return (abs(n.x) + abs(n.y)) * .5;
+        if (i == 7) return max(abs(n.x), abs(n.y));
+        return pow(n.y * .5 + .5, 3.);
+      }
       float property(int i, vec2 n, float r) {
         if (i == 0) return n.x * .5 + .5;
         if (i == 1) return n.y * .5 + .5;
@@ -180,13 +244,24 @@ function createBallFieldRuntime(el, options = {}) {
         // World position on the flat sheet: x right, y up, z towards the viewer. Row 0 is the top.
         float mid = float(side - 1) * .5;
         vec3 p = vec3((float(id % side) - mid) * spacing, (mid - float(id / side)) * spacing, 0.);
-        vec2 n = p.xy / 260.;
-        float f = property(int(displaceP.w), n, r0);
-        p.z += (displaceP.x + displaceP.y * sin(displaceP.z * phase)) * f;
-        f = property(int(twistP.w), n, r0);
-        float twist = (twistP.x + twistP.y * sin(twistP.z * phase)) * f;
-        float tc = cos(twist), ts = sin(twist);
-        p = vec3(p.x, p.y * tc + p.z * ts, p.z * tc - p.y * ts);
+        if (mode == 1) {
+          // Organic: waves travel across the sheet; twist turns around the vertical axis.
+          vec2 n = p.xy / max(mid * spacing, 1e-3);
+          float f = organicProperty(int(displaceP.w), n, r0);
+          p.z += displaceP.x * f + displaceP.y * sin(displaceP.z * phase - f * TAU);
+          f = organicProperty(int(twistP.w), n, r0);
+          float twist = twistP.x * f + twistP.y * sin(twistP.z * phase - f * TAU);
+          float tc = cos(twist), ts = sin(twist);
+          p = vec3(p.x * tc + p.z * ts, p.y, p.z * tc - p.x * ts);
+        } else {
+          vec2 n = p.xy / 260.;
+          float f = property(int(displaceP.w), n, r0);
+          p.z += (displaceP.x + displaceP.y * sin(displaceP.z * phase)) * f;
+          f = property(int(twistP.w), n, r0);
+          float twist = (twistP.x + twistP.y * sin(twistP.z * phase)) * f;
+          float tc = cos(twist), ts = sin(twist);
+          p = vec3(p.x, p.y * tc + p.z * ts, p.z * tc - p.y * ts);
+        }
         if (scatterP.x != 0.) {
           float z = r0 * 2. - 1., a = r1 * TAU, s = sqrt(max(0., 1. - z * z));
           vec3 dir = vec3(s * cos(a), s * sin(a), z) * (.35 + .65 * r2);
@@ -236,7 +311,7 @@ function createBallFieldRuntime(el, options = {}) {
       gl.deleteShader(vs); gl.deleteShader(fs);
       if (!gl.getProgramParameter(program, gl.LINK_STATUS)) throw Error(gl.getProgramInfoLog(program));
       vao = gl.createVertexArray(); // no attributes: everything comes from gl_InstanceID
-      for (const name of ['side', 'spacing', 'phase', 'camDist', 'focal', 'ballSize', 'viewport', 'rot', 'scatterP', 'displaceP', 'twistP', 'color', 'highlight']) {
+      for (const name of ['side', 'mode', 'spacing', 'phase', 'camDist', 'focal', 'ballSize', 'viewport', 'rot', 'scatterP', 'displaceP', 'twistP', 'color', 'highlight']) {
         u[name] = gl.getUniformLocation(program, name);
       }
       gl.enable(gl.BLEND);
@@ -261,6 +336,7 @@ function createBallFieldRuntime(el, options = {}) {
         const m = fp.rot; // row-major -> column-major
         gl.uniformMatrix3fv(u.rot, false, [m[0], m[3], m[6], m[1], m[4], m[7], m[2], m[5], m[8]]);
         gl.uniform1i(u.side, fp.side);
+        gl.uniform1i(u.mode, fp.mode);
         gl.uniform1f(u.spacing, fp.spacing);
         gl.uniform1f(u.phase, fp.phase);
         gl.uniform1f(u.camDist, fp.camDist);
@@ -307,13 +383,23 @@ function createBallFieldRuntime(el, options = {}) {
           const id = iy * fp.side + ix;
           const r0 = rand(id, 0), r1 = rand(id, 1), r2 = rand(id, 2), r3 = rand(id, 3);
           let x = (ix - mid) * fp.spacing, y = (mid - iy) * fp.spacing, z = 0;
-          const nx = x / HALF, ny = y / HALF;
-          let f = property(dProp, nx, ny, r0);
-          z += (dAmount + dSwing * Math.sin(dCycles * fp.phase)) * f;
-          f = property(tProp, nx, ny, r0);
-          const tw = (tAngle + tSwing * Math.sin(tCycles * fp.phase)) * f;
-          const c = Math.cos(tw), s = Math.sin(tw);
-          [y, z] = [y * c + z * s, z * c - y * s];
+          if (fp.mode === 1) {
+            const extent = Math.max(mid * fp.spacing, 1e-3), nx = x / extent, ny = y / extent;
+            let f = organicProperty(dProp, nx, ny, r0);
+            z += dAmount * f + dSwing * Math.sin(dCycles * fp.phase - f * TAU);
+            f = organicProperty(tProp, nx, ny, r0);
+            const tw = tAngle * f + tSwing * Math.sin(tCycles * fp.phase - f * TAU);
+            const c = Math.cos(tw), s = Math.sin(tw);
+            [x, z] = [x * c + z * s, z * c - x * s];
+          } else {
+            const nx = x / HALF, ny = y / HALF;
+            let f = property(dProp, nx, ny, r0);
+            z += (dAmount + dSwing * Math.sin(dCycles * fp.phase)) * f;
+            f = property(tProp, nx, ny, r0);
+            const tw = (tAngle + tSwing * Math.sin(tCycles * fp.phase)) * f;
+            const c = Math.cos(tw), s = Math.sin(tw);
+            [y, z] = [y * c + z * s, z * c - y * s];
+          }
           if (sAmount) {
             const dz = r0 * 2 - 1, a = r1 * TAU, sr = Math.sqrt(Math.max(0, 1 - dz * dz)), k = 0.35 + 0.65 * r2;
             const v = [sr * Math.cos(a) * k, sr * Math.sin(a) * k, dz * k];

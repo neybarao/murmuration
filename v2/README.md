@@ -1,5 +1,13 @@
 # Ball Field Lab (v2)
 
+Two effects, chosen with the Effect control (or `settings.effect`):
+
+- **Ball Action** (`ballAction`, default): reproduces the reference prototype's grid effect.
+- **Organic** (`organic`): the first v2 motion, with waves that travel across the sheet and a twist
+  around the vertical axis.
+
+Each effect is a preset in `BALL_FIELD_EFFECTS`; switching effect loads its preset.
+
 A grid of balls placed in 3D and bent by scatter, displace, twist and rotation, looping seamlessly.
 Inspired by a colleague's "Ball Action" prototype; reimplemented from scratch (no code reused) because
 that version draws every ball on the CPU with Canvas 2D and reaches about 7 fps at 67,600 balls.
