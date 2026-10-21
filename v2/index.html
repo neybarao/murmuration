@@ -74,6 +74,21 @@
     .specs tr.is-different td { background: var(--accent-soft); color: var(--ink); }
     .specs .group td { padding-top: 10px; color: var(--muted); font-size: 11px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; background: none; }
     .swatch { display: inline-block; width: 10px; height: 10px; margin-right: 5px; border: 1px solid var(--line); border-radius: 2px; vertical-align: -1px; }
+    .video-panel {
+      position: absolute; right: 16px; top: 60px; z-index: 3; width: min(320px, calc(100% - 32px));
+      display: grid; gap: 10px; padding: 14px; border: 1px solid var(--line); border-radius: 12px;
+      background: var(--surface); color: var(--ink); box-shadow: var(--shadow);
+    }
+    .video-panel h2 { margin: 0; font-size: 14px; }
+    .video-panel label { display: grid; gap: 4px; color: var(--muted); font-size: 12px; }
+    .video-panel select { min-height: 30px; border: 1px solid var(--line); border-radius: 7px; background: var(--field); color: var(--ink); font: inherit; }
+    .video-panel .note { margin: 0; color: var(--muted); font-size: 12px; line-height: 1.45; }
+    .video-panel .buttons { display: flex; gap: 6px; justify-content: flex-end; }
+    .video-panel .buttons button { border: 1px solid var(--line); }
+    .video-panel progress { width: 100%; accent-color: var(--accent); }
+    .video-panel a { color: var(--accent); font-weight: 600; }
+    .video-panel .error { color: #B3261E; }
+    .app[data-theme="dark"] .video-panel .error { color: #FF8F86; }
     .toast {
       position: absolute; left: 50%; bottom: 20px; z-index: 3; transform: translateX(-50%); padding: 8px 14px;
       border-radius: 9px; background: var(--ink); color: var(--surface); font-size: 12px; opacity: 0; transition: opacity .2s;
@@ -98,8 +113,30 @@
         <button type="button" id="playBtn">Pause</button>
         <button type="button" id="themeBtn">Dark</button>
         <button type="button" id="linkBtn">Copy link</button>
+        <button type="button" id="videoBtn" aria-expanded="false" aria-controls="videoPanel">Export video</button>
         <button type="button" id="downloadBtn" class="primary">Download JS</button>
       </div>
+      <form class="video-panel" id="videoPanel" hidden>
+        <h2>Export video</h2>
+        <p class="note">One loop of the selected screen, background only, in the current theme.</p>
+        <label>Method
+          <select id="videoMethod">
+            <option value="frames">Frame by frame (WebCodecs, MP4)</option>
+            <option value="realtime">Real time (MediaRecorder)</option>
+          </select>
+        </label>
+        <label>Size <select id="videoSize"></select></label>
+        <label>Frame rate
+          <select id="videoFps"><option value="30">30 fps</option><option value="60">60 fps</option></select>
+        </label>
+        <p class="note" id="videoInfo"></p>
+        <progress id="videoProgress" max="1" value="0" hidden></progress>
+        <p class="note" id="videoResult" role="status"></p>
+        <div class="buttons">
+          <button type="button" id="videoClose">Close</button>
+          <button type="submit" id="videoStart" class="primary">Export</button>
+        </div>
+      </form>
       <div class="toast" id="toast" role="status"></div>
     </main>
     <aside class="panel">
@@ -122,6 +159,8 @@
 
   <script src="./ball-field-runtime.js"></script>
   <script src="./ball-field-export.js"></script>
+  <script src="./vendor/mp4-muxer.js"></script>
+  <script src="./video-export.js"></script>
   <script>
     const PROPERTY_OPTIONS = [['x', 'X axis'], ['y', 'Y axis'], ['centerX', 'Center-X'], ['centerY', 'Center-Y'], ['radius', 'Radius'], ['random', 'Random'], ['diamond', 'Diamond'], ['rectangle', 'Rectangle'], ['fastTop', 'Fast top']];
     const AXIS_OPTIONS = [['x', 'X'], ['y', 'Y'], ['z', 'Z'], ['xy', 'XY'], ['xz', 'XZ'], ['yz', 'YZ'], ['xyz', 'XYZ']];
@@ -346,6 +385,60 @@
       try { await navigator.clipboard.writeText(specsText()); toast('Specs copied as a table'); }
       catch { toast('Copy failed'); }
     };
+
+    // Video export panel.
+    const support = videoSupport();
+    $('videoSize').innerHTML = Object.entries(VIDEO_SIZES).map(([key, size]) => `<option value="${key}"${key === '1080p' ? ' selected' : ''}>${size.label}</option>`).join('');
+    let videoAbort = null, videoUrl = '';
+    function updateVideoInfo() {
+      const method = $('videoMethod').value, fps = Number($('videoFps').value);
+      const frames = Math.round(state.loopLength * fps);
+      const screenName = active === 'home' ? 'Home' : 'Chat';
+      let text = method === 'frames'
+        ? `${screenName}, ${state.loopLength} s loop = ${frames} frames, H.264 MP4. Takes as long as your machine needs.`
+        : `${screenName}, records for ${state.loopLength} s in real time as ${support.recorderType || 'unsupported'}.`;
+      if (method === 'frames' && !support.frames) text = 'This browser has no WebCodecs video encoder. Use the real-time method.';
+      if (method === 'realtime' && !support.realtime) text = 'This browser cannot record the canvas.';
+      $('videoInfo').textContent = text;
+    }
+    ['videoMethod', 'videoFps', 'videoSize'].forEach(id => $(id).addEventListener('change', updateVideoInfo));
+    function toggleVideoPanel(open) {
+      $('videoPanel').hidden = !open;
+      $('videoBtn').setAttribute('aria-expanded', String(open));
+      if (open) updateVideoInfo();
+    }
+    $('videoBtn').onclick = () => toggleVideoPanel($('videoPanel').hidden);
+    $('videoClose').onclick = () => { if (videoAbort) videoAbort.abort(); toggleVideoPanel(false); };
+    $('videoPanel').addEventListener('submit', async event => {
+      event.preventDefault();
+      if (videoAbort) { videoAbort.abort(); return; }
+      const wasPlaying = state.playing;
+      runtime.pause();
+      videoAbort = new AbortController();
+      $('videoStart').textContent = 'Cancel';
+      $('videoProgress').hidden = false; $('videoProgress').value = 0;
+      $('videoResult').textContent = 'Exporting…'; $('videoResult').classList.remove('error');
+      if (videoUrl) { URL.revokeObjectURL(videoUrl); videoUrl = ''; }
+      try {
+        const result = await exportBallFieldVideo({
+          method: $('videoMethod').value, settings: { ...state }, theme, sizeKey: $('videoSize').value,
+          fps: Number($('videoFps').value), signal: videoAbort.signal,
+          onProgress: value => { $('videoProgress').value = value; }
+        });
+        videoUrl = URL.createObjectURL(result.blob);
+        const name = `ball-field-${active}-${theme}-${result.size.width}x${result.size.height}-${result.fps}fps.${result.extension}`;
+        $('videoResult').innerHTML = `Done in ${result.seconds.toFixed(1)} s, ${(result.blob.size / 1048576).toFixed(1)} MB (${result.codec}). <a href="${videoUrl}" download="${name}">Download ${name}</a>`;
+        const a = document.createElement('a'); a.href = videoUrl; a.download = name; document.body.appendChild(a); a.click(); a.remove();
+      } catch (error) {
+        $('videoResult').textContent = error.name === 'AbortError' ? 'Export cancelled.' : `Export failed: ${error.message}`;
+        if (error.name !== 'AbortError') $('videoResult').classList.add('error');
+      } finally {
+        videoAbort = null;
+        $('videoStart').textContent = 'Export';
+        $('videoProgress').hidden = true;
+        if (wasPlaying) runtime.play();
+      }
+    });
 
     // Wheel and pinch zoom over the preview.
     function setZoom(value) {

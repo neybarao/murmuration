@@ -88,7 +88,7 @@ function createBallFieldRuntime(el, options = {}) {
   const PERSPECTIVE = { ballAction: 2.4, organic: 1.3 / Math.tan(20 * Math.PI / 180) }, BLEED = 0.96;
   const FALLBACK_MAX_BALLS = 9000;
   const {
-    renderer = 'webgl2', theme = 'light', maxPixelRatio = 2, fit = 'cover',
+    renderer = 'webgl2', theme = 'light', maxPixelRatio = 2, fit = 'cover', pixelRatio = 0,
     respectReducedMotion = true, onFrame = null
   } = options;
   // Named states ("home", "chat", ...). A single `settings` object is accepted as the "home" state.
@@ -485,7 +485,8 @@ function createBallFieldRuntime(el, options = {}) {
   function resize() {
     const rect = el.getBoundingClientRect();
     width = Math.max(1, rect.width); height = Math.max(1, rect.height);
-    ratio = Math.min(maxPixelRatio, window.devicePixelRatio || 1);
+    // A fixed pixelRatio (used by video export) overrides the device's.
+    ratio = pixelRatio > 0 ? pixelRatio : Math.min(maxPixelRatio, window.devicePixelRatio || 1);
     const w = Math.round(width * ratio), h = Math.round(height * ratio);
     dirty = true;
     if (canvas.width !== w || canvas.height !== h) {
@@ -596,6 +597,15 @@ function createBallFieldRuntime(el, options = {}) {
     play() { settings.playing = true; schedule(); },
     pause() { settings.playing = false; schedule(); },
     seek(value) { progress = ((Number(value) % 1) + 1) % 1; dirty = true; schedule(); },
+    // Draws one exact moment of the loop right now, without a transition, and returns the canvas.
+    // Video export calls this frame by frame and reads the canvas in the same task.
+    renderAt(value) {
+      if (destroyed) return canvas;
+      progress = ((Number(value) % 1) + 1) % 1;
+      transition = null;
+      render();
+      return canvas;
+    },
     stats,
     destroy() {
       if (destroyed) return;

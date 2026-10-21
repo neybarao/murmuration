@@ -38,6 +38,18 @@ field.transitionTo('chat');   // smooth transition
 field.setTheme('dark');
 ```
 
+## Video export (experimental, branch v2/video-export)
+
+**Export video** records one loop of the selected screen in the current theme. Only the animation is
+recorded: a separate off-screen runtime renders at the chosen size, so no editor UI appears.
+
+| Method | How | Output |
+| --- | --- | --- |
+| Frame by frame | WebCodecs `VideoEncoder` encodes each frame at an exact loop position; `vendor/mp4-muxer.js` (5.2.2, MIT, deprecated upstream in favour of Mediabunny) writes the MP4. | H.264 MP4, or VP9 in MP4 where H.264 encoding is unavailable. Exact frame count, seamless loop, any size. |
+| Real time | `canvas.captureStream()` + `MediaRecorder` while the loop plays. | MP4 or WebM depending on the browser. Timing follows the machine. |
+
+Sizes: 1280×720, 1920×1080, 3840×2160 (CSS 1920×1080 at pixel ratio 2), 1080×1920, 1080×1080.
+
 ## Why it is fast
 
 - Every ball position is a closed-form function of (ball index, loop progress). The whole simulation
