@@ -61,6 +61,19 @@
     }
     .row input[type="color"] { width: 44px; padding: 2px; }
     .check { display: flex; gap: 8px; align-items: center; margin-bottom: 10px; }
+    .screens { display: flex; gap: 2px; padding: 2px; margin: 0 0 6px; border: 1px solid var(--line); border-radius: 10px; background: var(--field); }
+    .screens button { flex: 1; }
+    .screens button[aria-pressed="true"] { background: var(--accent); color: var(--accent-ink); }
+    .screens-note { margin: 0 0 14px; color: var(--muted); font-size: 12px; line-height: 1.45; }
+    .specs-head { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin-bottom: 8px; }
+    .specs-head button { border: 1px solid var(--line); }
+    .specs { width: 100%; border-collapse: collapse; font-size: 12px; font-variant-numeric: tabular-nums; }
+    .specs th, .specs td { padding: 4px 6px; border-bottom: 1px solid var(--line); text-align: left; vertical-align: top; }
+    .specs th { color: var(--muted); font-weight: 600; }
+    .specs td:first-child { color: var(--muted); }
+    .specs tr.is-different td { background: var(--accent-soft); color: var(--ink); }
+    .specs .group td { padding-top: 10px; color: var(--muted); font-size: 11px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; background: none; }
+    .swatch { display: inline-block; width: 10px; height: 10px; margin-right: 5px; border: 1px solid var(--line); border-radius: 2px; vertical-align: -1px; }
     .toast {
       position: absolute; left: 50%; bottom: 20px; z-index: 3; transform: translateX(-50%); padding: 8px 14px;
       border-radius: 9px; background: var(--ink); color: var(--surface); font-size: 12px; opacity: 0; transition: opacity .2s;
@@ -92,8 +105,18 @@
     <aside class="panel">
       <h1>Ball Field Lab</h1>
       <p class="sub">Every animated value uses whole cycle counts, so the loop returns exactly to its start. Scroll or pinch over the preview to zoom.</p>
+      <div class="screens" role="group" aria-label="Screen">
+        <button type="button" data-screen="home" aria-pressed="true">Home</button>
+        <button type="button" data-screen="chat" aria-pressed="false">Chat</button>
+      </div>
+      <p class="screens-note">The controls edit the selected screen. Switching screens plays the transition the app will use.</p>
       <div id="controls"></div>
-      <button type="button" id="resetBtn">Reset controls</button>
+      <button type="button" id="resetBtn">Reset this screen</button>
+      <fieldset>
+        <legend>Specs</legend>
+        <div class="specs-head"><span class="screens-note" style="margin:0">Highlighted rows differ between screens.</span><button type="button" id="copySpecsBtn">Copy specs</button></div>
+        <table class="specs" id="specs"></table>
+      </fieldset>
     </aside>
   </div>
 
@@ -106,7 +129,7 @@
     const SECTIONS = [
       ['Effect', [['effect', 'Effect', EFFECT_OPTIONS]]],
       ['View', [['zoom', 'Zoom', 0, 100, 0.5, v => (2 ** ((v - 50) / 12.5)).toFixed(2) + '×'], ['tilt', 'Tilt', -90, 90, 1, '°']]],
-      ['Loop', [['playing', 'Play', 'check'], ['loopLength', 'Loop length', 1, 60, 0.5, 's']]],
+      ['Loop', [['playing', 'Play', 'check'], ['loopLength', 'Loop length', 1, 60, 0.5, 's'], ['transitionDuration', 'Screen transition', 0, 4000, 50, ' ms']]],
       ['Array', [['gridSpacing', 'Grid spacing', 2, 40, 1], ['ballSize', 'Ball size', 1, 200, 1], ['maxBallSize', 'Max ball size', 1, 40, 0.5, ' px']]],
       ['Scatter', [['scatter', 'Scatter', 0, 300, 0.5], ['scatterMotion', 'Scatter motion', -720, 720, 1, '°'], ['scatterCycles', 'Scatter motion cycles', -4, 4, 1, '×']]],
       ['Displace', [['displace', 'Displace', -600, 600, 1], ['displaceProperty', 'Displace property', PROPERTY_OPTIONS], ['displaceSwing', 'Displace swing', 0, 600, 1], ['displaceCycles', 'Displace cycles', 0, 8, 1, '×']]],
@@ -127,12 +150,23 @@
     }
     const linked = readLink();
     let theme = linked.theme === 'dark' ? 'dark' : 'light';
-    let state = { ...clone(BALL_FIELD_DEFAULTS), ...(linked.settings || {}) };
-    state.colors = { ...clone(BALL_FIELD_DEFAULTS.colors), ...(linked.settings && linked.settings.colors) };
+    const withDefaults = saved => {
+      const out = { ...clone(BALL_FIELD_DEFAULTS), ...(saved || {}) };
+      out.colors = { light: { ...BALL_FIELD_DEFAULTS.colors.light, ...(saved && saved.colors && saved.colors.light) }, dark: { ...BALL_FIELD_DEFAULTS.colors.dark, ...(saved && saved.colors && saved.colors.dark) } };
+      return out;
+    };
+    // Home and Chat. Chat starts as Home with the centre faded, since chat content sits in the middle.
+    // Older links carried one `settings` object: it becomes Home.
+    const states = linked.states
+      ? { home: withDefaults(linked.states.home), chat: withDefaults(linked.states.chat) }
+      : { home: withDefaults(linked.settings), chat: { ...withDefaults(linked.settings), centerAttenuation: 0.72 } };
+    let transitionDuration = Number.isFinite(linked.transitionDuration) ? linked.transitionDuration : 1200;
+    let active = linked.active === 'chat' ? 'chat' : 'home';
+    let state = states[active];
     const params = new URLSearchParams(location.search);
 
     const runtime = createBallFieldRuntime(stage, {
-      settings: state, theme, respectReducedMotion: false,
+      states, initialState: active, transitionDuration, theme, respectReducedMotion: false,
       renderer: params.get('renderer') === 'canvas2d' ? 'canvas2d' : 'webgl2',
       onFrame: s => { hudStats = s; }
     });
@@ -180,23 +214,41 @@
     }
     function onInput(key) {
       const { def, input } = inputs[key];
-      if (def[2] === 'check') state[key] = input.checked;
-      else if (def[2] === 'color') state.colors[theme][key] = input.value;
+      if (key === 'transitionDuration') {
+        transitionDuration = Number(input.value); runtime.transitionDuration = transitionDuration;
+        $(`c-${key}-out`).textContent = format(def, transitionDuration); scheduleLink(); return;
+      }
+      if (key === 'playing') { setPlaying(input.checked); return; }
+      if (def[2] === 'color') state.colors[theme][key] = input.value;
       else if (key === 'effect') { applyEffect(input.value); return; }
       else if (Array.isArray(def[2])) state[key] = input.value;
       else { state[key] = Number(input.value); $(`c-${key}-out`).textContent = format(def, state[key]); }
       runtime.update(state);
-      if (key === 'playing') syncPlay();
-      scheduleLink();
+      scheduleLink(); scheduleSpecs();
     }
     function syncControls() {
       for (const [key, { def, input }] of Object.entries(inputs)) {
-        if (def[2] === 'check') input.checked = !!state[key];
+        if (key === 'transitionDuration') { input.value = transitionDuration; $(`c-${key}-out`).textContent = format(def, transitionDuration); }
+        else if (def[2] === 'check') input.checked = !!state[key];
         else if (def[2] === 'color') input.value = state.colors[theme][key];
         else { input.value = state[key]; const out = $(`c-${key}-out`); if (out) out.textContent = format(def, state[key]); }
       }
       syncPlay();
+      document.querySelectorAll('[data-screen]').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.screen === active)));
+      scheduleSpecs();
     }
+    function setPlaying(on) {
+      states.home.playing = states.chat.playing = on;
+      if (on) runtime.play(); else runtime.pause();
+      syncControls(); scheduleLink();
+    }
+    function selectScreen(name) {
+      if (name === active) return;
+      active = name; state = states[name];
+      runtime.transitionTo(name);
+      syncControls(); scheduleLink();
+    }
+    document.querySelectorAll('[data-screen]').forEach(b => b.addEventListener('click', () => selectScreen(b.dataset.screen)));
     function syncPlay() { $('playBtn').textContent = state.playing ? 'Pause' : 'Play'; }
     function applyTheme() {
       app.dataset.theme = theme;
@@ -207,7 +259,7 @@
 
     let linkTimer = 0;
     function shareUrl() {
-      const json = JSON.stringify({ v: 1, theme, settings: state });
+      const json = JSON.stringify({ v: 2, theme, active, transitionDuration, states });
       const encoded = btoa(unescape(encodeURIComponent(json))).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
       return `${location.origin}${location.pathname}${location.search}#s=${encoded}`;
     }
@@ -225,13 +277,13 @@
       $('fullBtn').setAttribute('aria-pressed', String(full));
       $('fullBtn').textContent = full ? 'Show controls' : 'Full screen';
     };
-    $('playBtn').onclick = () => { state.playing = !state.playing; runtime.update(state); syncControls(); scheduleLink(); };
+    $('playBtn').onclick = () => setPlaying(!state.playing);
     $('themeBtn').onclick = () => { theme = theme === 'dark' ? 'light' : 'dark'; applyTheme(); scheduleLink(); };
     // Switching effect loads that effect's preset; colors and play state stay as they are.
     function applyEffect(name) {
       const preset = { ...BALL_FIELD_EFFECTS[name] || BALL_FIELD_EFFECTS.ballAction };
       delete preset.label;
-      state = { ...state, ...preset, effect: name };
+      state = states[active] = { ...state, ...preset, effect: name };
       runtime.update(state); syncControls(); scheduleLink();
     }
     $('resetBtn').onclick = () => applyEffect(state.effect);
@@ -240,12 +292,59 @@
       catch { toast('Copy failed: use the address bar'); }
     };
     $('downloadBtn').onclick = () => {
-      const blob = new Blob([buildBallFieldModule(state)], { type: 'text/javascript' });
+      const blob = new Blob([buildBallFieldModule({ states, transitionDuration })], { type: 'text/javascript' });
       const a = document.createElement('a');
       a.href = URL.createObjectURL(blob); a.download = 'ball-field-background.js';
       document.body.appendChild(a); a.click(); a.remove();
       setTimeout(() => URL.revokeObjectURL(a.href), 1000);
       toast('Downloaded ball-field-background.js');
+    };
+
+    // Specs: every control for Home and Chat side by side, with rows that differ highlighted.
+    function specValue(def, screen) {
+      const [key, , a] = def;
+      if (a === 'color') return { light: screen.colors.light[key], dark: screen.colors.dark[key] };
+      if (Array.isArray(a)) return (a.find(([v]) => v === screen[key]) || [, screen[key]])[1];
+      if (a === 'check') return screen[key] ? 'On' : 'Off';
+      return format(def, screen[key]);
+    }
+    function specRows() {
+      const rows = [];
+      for (const [title, defs] of SECTIONS) {
+        const items = defs.filter(def => !['playing', 'transitionDuration'].includes(def[0]));
+        if (!items.length) continue;
+        rows.push({ group: title });
+        for (const def of items) {
+          const home = specValue(def, states.home), chat = specValue(def, states.chat);
+          if (def[2] === 'color') {
+            for (const mode of ['light', 'dark']) rows.push({ label: `${def[1]} (${mode})`, home: home[mode], chat: chat[mode], color: true });
+          } else rows.push({ label: def[1], home, chat });
+        }
+      }
+      rows.push({ group: 'Transition' }, { label: 'Screen transition', home: `${transitionDuration} ms`, chat: `${transitionDuration} ms` });
+      return rows;
+    }
+    const escapeHtml = v => String(v).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
+    const cell = (v, color) => color ? `<span class="swatch" style="background:${escapeHtml(v)}"></span>${escapeHtml(String(v).toUpperCase())}` : escapeHtml(v);
+    let specsTimer = 0;
+    function scheduleSpecs() { clearTimeout(specsTimer); specsTimer = setTimeout(renderSpecs, 120); }
+    function renderSpecs() {
+      $('specs').innerHTML = '<thead><tr><th>Parameter</th><th>Home</th><th>Chat</th></tr></thead><tbody>' + specRows().map(r => r.group
+        ? `<tr class="group"><td colspan="3">${escapeHtml(r.group)}</td></tr>`
+        : `<tr class="${r.home !== r.chat ? 'is-different' : ''}"><td>${escapeHtml(r.label)}</td><td>${cell(r.home, r.color)}</td><td>${cell(r.chat, r.color)}</td></tr>`).join('') + '</tbody>';
+    }
+    function specsText() {
+      const lines = ['| Parameter | Home | Chat |', '| --- | --- | --- |'];
+      for (const r of specRows()) {
+        if (r.group) lines.push(`| **${r.group}** | | |`);
+        else lines.push(`| ${r.label}${r.home !== r.chat ? ' *' : ''} | ${r.home} | ${r.chat} |`);
+      }
+      lines.push('', '* differs between Home and Chat');
+      return lines.join('\n');
+    }
+    $('copySpecsBtn').onclick = async () => {
+      try { await navigator.clipboard.writeText(specsText()); toast('Specs copied as a table'); }
+      catch { toast('Copy failed'); }
     };
 
     // Wheel and pinch zoom over the preview.

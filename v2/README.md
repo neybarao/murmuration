@@ -21,6 +21,23 @@ that version draws every ball on the CPU with Canvas 2D and reaches about 7 fps 
 Open `v2/index.html` through a local server (for example `npx serve .` from the repo root).
 `?renderer=canvas2d` forces the fallback.
 
+## Screens
+
+The lab edits two screens, **Home** and **Chat**. The controls edit the selected screen; switching
+screens plays the transition the app will use (Screen transition, default 1200 ms). Numbers and colors
+interpolate; changes of effect, grid spacing, properties, rotation axis or cycle counts cross-fade.
+The **Specs** table lists every parameter for both screens and highlights the differences; **Copy
+specs** copies it as a Markdown table.
+
+Download JS exports both screens. In the app:
+
+```js
+import { createBallFieldBackground } from './ball-field-background.js';
+const field = createBallFieldBackground(document.querySelector('#bg'), { initialState: 'home', theme: 'light' });
+field.transitionTo('chat');   // smooth transition
+field.setTheme('dark');
+```
+
 ## Why it is fast
 
 - Every ball position is a closed-form function of (ball index, loop progress). The whole simulation

@@ -31,7 +31,7 @@ const check = (ok, label) => { console.log(`${ok ? 'PASS' : 'FAIL'}: ${label}`);
     page.on('console', m => { if (m.type() === 'error' || m.type() === 'warning') errors.push(m.text()); });
     await page.goto(`${base}/v2/`);
     await page.waitForTimeout(1500);
-    await page.evaluate(() => { state.playing = false; runtime.update(state); });
+    await page.evaluate(() => setPlaying(false));
     const s = await page.evaluate(() => runtime.stats());
     check(s.backend === 'webgl2', `default backend is webgl2 (got ${s.backend})`);
     check(s.balls === 67600, `default grid draws 67,600 balls (got ${s.balls})`);
@@ -78,7 +78,7 @@ const check = (ok, label) => { console.log(`${ok ? 'PASS' : 'FAIL'}: ${label}`);
     check(same < 0.002, `loop end matches loop start (${(same * 100).toFixed(3)}% pixels differ)`);
 
     // Real mouse clicks reach the buttons that sit over the preview.
-    await page.evaluate(() => { state.playing = true; runtime.update(state); syncControls(); });
+    await page.evaluate(() => setPlaying(true));
     await page.click('#playBtn');
     await page.click('#themeBtn');
     await page.click('#fullBtn');
@@ -96,17 +96,40 @@ const check = (ok, label) => { console.log(`${ok ? 'PASS' : 'FAIL'}: ${label}`);
     check(organic[3] === 0.7, `center attenuation survives switching effect (${organic[3]})`);
     await page.selectOption('#c-effect', 'ballAction');
 
+    // Home -> Chat: Chat fades the centre; the transition interpolates and then settles.
+    await page.evaluate(() => setPlaying(false));
+    await page.click('[data-screen="chat"]');
+    const during = await page.evaluate(() => runtime.stats().transitioning);
+    await page.waitForTimeout(1600);
+    const chat = await page.evaluate(() => [runtime.activeState, runtime.settings.centerAttenuation, runtime.stats().transitioning, active]);
+    check(during === true && chat[0] === 'chat' && chat[1] === 0.72 && chat[2] === false && chat[3] === 'chat', `Home to Chat transition runs and settles (${chat.join(', ')})`);
+    // Cross-fade path: Chat on Organic, then back to Home.
+    await page.selectOption('#c-effect', 'organic');
+    await page.click('[data-screen="home"]');
+    await page.waitForTimeout(600);
+    const mid = await page.locator('#stage canvas').screenshot();
+    fs.writeFileSync(path.join(root, 'tests', 'out', 'ball-field-crossfade.png'), mid);
+    await page.waitForTimeout(1200);
+    const back = await page.evaluate(() => [runtime.activeState, runtime.settings.effect, states.chat.effect]);
+    check(back[0] === 'home' && back[1] === 'ballAction' && back[2] === 'organic', `cross-fade between effects settles on Home (${back.join(', ')})`);
+    const specRowsDiffer = await page.evaluate(() => document.querySelectorAll('#specs tr.is-different').length);
+    check(specRowsDiffer > 3, `specs table highlights rows that differ (${specRowsDiffer})`);
+    await page.click('[data-screen="chat"]');
+    await page.selectOption('#c-effect', 'ballAction');
+    await page.click('[data-screen="home"]');
+    await page.waitForTimeout(1500);
+
     // Share link round trip.
     await page.evaluate(() => { state.twistAngle = 123; state.gridSpacing = 7; runtime.update(state); });
     const link = await page.evaluate(() => shareUrl());
     const page2 = await browser.newPage();
     await page2.goto(link);
     await page2.waitForTimeout(500);
-    const restored = await page2.evaluate(() => [state.twistAngle, state.gridSpacing, runtime.stats().balls]);
-    check(restored[0] === 123 && restored[1] === 7, `share link restores settings (${restored.join(', ')})`);
+    const restored = await page2.evaluate(() => [state.twistAngle, state.gridSpacing, states.chat.centerAttenuation]);
+    check(restored[0] === 123 && restored[1] === 7 && restored[2] === 0.72, `share link restores settings (${restored.join(', ')})`);
 
     // Download JS: module imports into an empty page and renders.
-    const source = await page.evaluate(() => buildBallFieldModule(state));
+    const source = await page.evaluate(() => buildBallFieldModule({ states, transitionDuration }));
     const page3 = await browser.newPage();
     await page3.goto(`${base}/__blank`);
     await page3.setContent('<div id="bg" style="position:fixed;inset:0;isolation:isolate"></div>');
@@ -115,12 +138,12 @@ const check = (ok, label) => { console.log(`${ok ? 'PASS' : 'FAIL'}: ${label}`);
       const mod = await import(url);
       const field = mod.createBallFieldBackground(document.getElementById('bg'));
       await new Promise(r => setTimeout(r, 300));
-      const out = { backend: field.backend, twist: field.settings.twistAngle, balls: field.stats().balls };
+      const out = { backend: field.backend, twist: field.settings.twistAngle, balls: field.stats().balls, states: field.states.join('+'), toChat: field.transitionTo('chat'), noUi: !document.querySelector('button, input, select') };
       field.destroy();
       out.removed = !document.querySelector('#bg canvas');
       return out;
     }, source);
-    check(exported.backend === 'webgl2' && exported.twist === 123 && exported.removed, `exported module works and destroys cleanly (${JSON.stringify(exported)})`);
+    check(exported.backend === 'webgl2' && exported.twist === 123 && exported.removed && exported.states === 'home+chat' && exported.toChat && exported.noUi, `exported module works and destroys cleanly (${JSON.stringify(exported)})`);
 
     // Canvas 2D fallback.
     const page4 = await browser.newPage({ viewport: { width: 960, height: 600 } });

@@ -91,7 +91,19 @@ function createBallFieldRuntime(el, options = {}) {
     renderer = 'webgl2', theme = 'light', maxPixelRatio = 2, fit = 'cover',
     respectReducedMotion = true, onFrame = null
   } = options;
-  const settings = mergeSettings(BALL_FIELD_DEFAULTS, options.settings || {});
+  // Named states ("home", "chat", ...). A single `settings` object is accepted as the "home" state.
+  const collections = {};
+  for (const [name, state] of Object.entries(options.states || { home: options.settings || {} })) {
+    collections[name] = mergeSettings(BALL_FIELD_DEFAULTS, state || {});
+  }
+  let activeState = collections[options.initialState] ? options.initialState : Object.keys(collections)[0];
+  let transitionDuration = Number.isFinite(options.transitionDuration) ? options.transitionDuration : 1200;
+  const settings = mergeSettings(collections[activeState], {});
+  // While a transition runs: { from, start, duration }. Numbers and colors interpolate; structural
+  // differences (effect, grid, properties, axis, cycle counts) cross-fade between the two fields.
+  let transition = null;
+  const STRUCTURAL = ['effect', 'gridSpacing', 'displaceProperty', 'twistProperty', 'rotationAxis', 'scatterCycles', 'displaceCycles', 'twistCycles', 'rotationCycles'];
+  const NUMERIC = ['zoom', 'tilt', 'loopLength', 'ballSize', 'maxBallSize', 'scatter', 'scatterMotion', 'displace', 'displaceSwing', 'twistAngle', 'twistSwing', 'rotation', 'centerAttenuation'];
   let activeTheme = theme === 'dark' ? 'dark' : 'light';
   let progress = 0, last = 0, raf = 0, destroyed = false, dirty = true;
   let fps = 0, fpsFrames = 0, fpsStart = 0, frameCpu = 0;
@@ -164,8 +176,7 @@ function createBallFieldRuntime(el, options = {}) {
     return o;
   }
   // Everything the frame needs, derived once per frame from settings and progress.
-  function frameParameters() {
-    const s = settings;
+  function frameParameters(s = settings) {
     const spacing = Math.max(0.5, s.gridSpacing);
     const side = Math.max(1, Math.floor(FIELD / spacing + 1e-6));
     const organic = s.effect === 'organic';
@@ -195,6 +206,19 @@ function createBallFieldRuntime(el, options = {}) {
       displace: [s.displace, s.displaceSwing, Math.round(s.displaceCycles), Math.max(0, PROPERTIES.indexOf(s.displaceProperty))],
       twist: [s.twistAngle * deg, s.twistSwing * deg, Math.round(s.twistCycles), Math.max(0, PROPERTIES.indexOf(s.twistProperty))]
     };
+  }
+  const smoothstep = t => { t = Math.min(1, Math.max(0, t)); return t * t * (3 - 2 * t); };
+  function mixHex(a, b, t) {
+    const x = hexToRgb(a), y = hexToRgb(b);
+    return '#' + x.map((v, i) => Math.round((v + (y[i] - v) * t) * 255).toString(16).padStart(2, '0')).join('');
+  }
+  function mixColors(a, b, t) {
+    return { ball: mixHex(a.ball, b.ball, t), background: mixHex(a.background, b.background, t) };
+  }
+  function blendSettings(a, b, t) {
+    const out = { ...b };
+    for (const key of NUMERIC) out[key] = Number(a[key]) + (Number(b[key]) - Number(a[key])) * t;
+    return out;
   }
   function hexToRgb(hex) {
     const value = Number.parseInt(String(hex).replace('#', '').slice(0, 6), 16) || 0;
@@ -293,12 +317,12 @@ function createBallFieldRuntime(el, options = {}) {
     const fragment = `#version 300 es
       precision mediump float;
       uniform vec3 color, highlight;
-      uniform float attenuation, screenWidth;
+      uniform float attenuation, screenWidth, opacity;
       in vec2 local;
       in float halfPx, coverage;
       out vec4 result;
       void main() {
-        float a = clamp((1. - length(local)) * halfPx + .5, 0., 1.) * coverage;
+        float a = clamp((1. - length(local)) * halfPx + .5, 0., 1.) * coverage * opacity;
         if (attenuation > 0.) {
           float h = gl_FragCoord.x / screenWidth;
           a *= 1. - smoothstep(.15, .25, h) * (1. - smoothstep(.75, .85, h)) * attenuation * .95;
@@ -325,7 +349,7 @@ function createBallFieldRuntime(el, options = {}) {
       gl.deleteShader(vs); gl.deleteShader(fs);
       if (!gl.getProgramParameter(program, gl.LINK_STATUS)) throw Error(gl.getProgramInfoLog(program));
       vao = gl.createVertexArray(); // no attributes: everything comes from gl_InstanceID
-      for (const name of ['side', 'mode', 'spacing', 'phase', 'camDist', 'focal', 'ballSize', 'maxBall', 'viewport', 'rot', 'scatterP', 'displaceP', 'twistP', 'color', 'highlight', 'attenuation', 'screenWidth']) {
+      for (const name of ['side', 'mode', 'spacing', 'phase', 'camDist', 'focal', 'ballSize', 'maxBall', 'viewport', 'rot', 'scatterP', 'displaceP', 'twistP', 'color', 'highlight', 'attenuation', 'screenWidth', 'opacity']) {
         u[name] = gl.getUniformLocation(program, name);
       }
       gl.enable(gl.BLEND);
@@ -339,12 +363,14 @@ function createBallFieldRuntime(el, options = {}) {
     canvas.addEventListener('webglcontextrestored', onRestored);
     return {
       name: 'webgl2',
-      draw(fp, colors) {
+      draw(fp, colors, opacity = 1, clear = true) {
         if (lost) return;
         const bg = hexToRgb(colors.background), ink = hexToRgb(colors.ball);
         gl.viewport(0, 0, canvas.width, canvas.height);
-        gl.clearColor(bg[0], bg[1], bg[2], 1);
-        gl.clear(gl.COLOR_BUFFER_BIT);
+        if (clear) {
+          gl.clearColor(bg[0], bg[1], bg[2], 1);
+          gl.clear(gl.COLOR_BUFFER_BIT);
+        }
         gl.useProgram(program);
         gl.bindVertexArray(vao);
         const m = fp.rot; // row-major -> column-major
@@ -366,6 +392,7 @@ function createBallFieldRuntime(el, options = {}) {
         gl.uniform3f(u.highlight, ...hi);
         gl.uniform1f(u.attenuation, fp.attenuation);
         gl.uniform1f(u.screenWidth, canvas.width);
+        gl.uniform1f(u.opacity, opacity);
         gl.drawArraysInstanced(gl.TRIANGLE_STRIP, 0, 4, fp.count);
         return fp.count;
       },
@@ -384,7 +411,7 @@ function createBallFieldRuntime(el, options = {}) {
     const ctx = canvas.getContext('2d', { alpha: false });
     return {
       name: 'canvas2d',
-      draw(fp, colors) {
+      draw(fp, colors, opacity = 1, clear = true) {
         const stride = Math.max(1, Math.ceil(Math.sqrt(fp.count / FALLBACK_MAX_BALLS)));
         const cw = canvas.width, ch = canvas.height, cx = cw / 2, cy = ch / 2, m = fp.rot;
         const mid = (fp.side - 1) / 2;
@@ -392,9 +419,12 @@ function createBallFieldRuntime(el, options = {}) {
         const [tAngle, tSwing, tCycles, tProp] = fp.twist;
         const size = fp.ballSize * stride;
         ctx.globalAlpha = 1;
-        ctx.fillStyle = colors.background;
-        ctx.fillRect(0, 0, cw, ch);
+        if (clear) {
+          ctx.fillStyle = colors.background;
+          ctx.fillRect(0, 0, cw, ch);
+        }
         ctx.fillStyle = colors.ball;
+        ctx.globalAlpha = opacity;
         let drawn = 0;
         for (let iy = 0; iy < fp.side; iy += stride) for (let ix = 0; ix < fp.side; ix += stride) {
           const id = iy * fp.side + ix;
@@ -436,7 +466,7 @@ function createBallFieldRuntime(el, options = {}) {
           if (px + d < 0 || py + d < 0 || px - d > cw || py - d > ch) continue;
           if (fp.attenuation) {
             const h = px / cw, smooth = (a, b, v) => { const t = Math.min(1, Math.max(0, (v - a) / (b - a))); return t * t * (3 - 2 * t); };
-            ctx.globalAlpha = 1 - smooth(0.15, 0.25, h) * (1 - smooth(0.75, 0.85, h)) * fp.attenuation * 0.95;
+            ctx.globalAlpha = opacity * (1 - smooth(0.15, 0.25, h) * (1 - smooth(0.75, 0.85, h)) * fp.attenuation * 0.95);
           }
           ctx.fillRect(px - d / 2, py - d / 2, d, d);
           drawn++;
@@ -468,31 +498,49 @@ function createBallFieldRuntime(el, options = {}) {
   }
   function render() {
     const start = performance.now();
-    drawnBalls = backend.draw(frameParameters(), settings.colors[activeTheme]) || 0;
+    const colors = settings.colors[activeTheme];
+    if (transition) {
+      const t = smoothstep((performance.now() - transition.start) / Math.max(1, transition.duration));
+      const from = transition.from;
+      const mixed = mixColors(from.colors[activeTheme], colors, t);
+      if (STRUCTURAL.some(key => from[key] !== settings[key])) {
+        // Different fields: draw both over the blended background, fading one out and the other in.
+        drawnBalls = (backend.draw(frameParameters(from), { ...mixed, ball: from.colors[activeTheme].ball }, 1 - t, true) || 0)
+          + (backend.draw(frameParameters(settings), { ...mixed, ball: colors.ball }, t, false) || 0);
+      } else {
+        drawnBalls = backend.draw(frameParameters(blendSettings(from, settings, t)), mixed) || 0;
+      }
+      if (t >= 1) transition = null;
+    } else {
+      drawnBalls = backend.draw(frameParameters(), colors) || 0;
+    }
     frameCpu = performance.now() - start;
     dirty = false;
   }
   const reducedMotion = window.matchMedia ? window.matchMedia('(prefers-reduced-motion: reduce)') : null;
   const animating = () => settings.playing && !document.hidden && !(respectReducedMotion && reducedMotion && reducedMotion.matches);
+  const busy = () => animating() || (transition && !document.hidden);
   function tick(now) {
     raf = 0;
     if (destroyed) return;
     if (animating()) {
       const dt = last ? Math.min(0.1, (now - last) / 1000) : 0;
       last = now;
-      progress = (progress + dt / Math.max(0.5, settings.loopLength)) % 1;
+      const loopLength = transition ? blendSettings(transition.from, settings, 0.5).loopLength : settings.loopLength;
+      progress = (progress + dt / Math.max(0.5, loopLength)) % 1;
       dirty = true;
       fpsFrames++;
       if (!fpsStart) fpsStart = now;
       if (now - fpsStart >= 500) { fps = fpsFrames * 1000 / (now - fpsStart); fpsFrames = 0; fpsStart = now; }
     } else { last = 0; fps = 0; fpsFrames = 0; fpsStart = 0; }
+    if (transition) dirty = true;
     if (dirty) render();
     if (onFrame) onFrame(stats());
-    if (animating()) raf = requestAnimationFrame(tick);
+    if (busy()) raf = requestAnimationFrame(tick);
   }
   function schedule() { if (!raf && !destroyed) raf = requestAnimationFrame(tick); }
   function stats() {
-    return { backend: backend.name, balls: frameParameters().count, drawn: drawnBalls, fps, frameCpu, progress, playing: animating() };
+    return { backend: backend.name, balls: frameParameters().count, drawn: drawnBalls, fps, frameCpu, progress, playing: animating(), state: activeState, transitioning: !!transition };
   }
 
   const resizeObserver = typeof ResizeObserver === 'function' ? new ResizeObserver(resize) : null;
@@ -508,11 +556,41 @@ function createBallFieldRuntime(el, options = {}) {
     get settings() { return mergeSettings(settings, {}); },
     get theme() { return activeTheme; },
     get progress() { return progress; },
+    get activeState() { return activeState; },
+    get states() { return Object.keys(collections); },
+    get transitionDuration() { return transitionDuration; },
+    set transitionDuration(value) { if (Number.isFinite(value)) transitionDuration = Math.max(0, value); },
+    // Changes the active state's settings immediately (the editor uses this while you drag a slider).
     update(next) {
       if (destroyed) return;
       const merged = mergeSettings(settings, next || {});
       Object.assign(settings, merged);
+      collections[activeState] = mergeSettings(merged, {});
       dirty = true; schedule();
+    },
+    // Registers or replaces a named state. Updating the active state applies it at once.
+    setState(name, state) {
+      if (destroyed || !name) return;
+      collections[name] = mergeSettings(BALL_FIELD_DEFAULTS, state || {});
+      if (name === activeState) { Object.assign(settings, collections[name], { playing: settings.playing }); dirty = true; schedule(); }
+    },
+    // Moves to another named state with a smooth transition. Unknown names are ignored.
+    transitionTo(name, duration = transitionDuration) {
+      if (destroyed || !collections[name]) return false;
+      const from = mergeSettings(settings, {});
+      if (transition) {
+        // Start from what is on screen now rather than jumping back to the previous target.
+        const t = smoothstep((performance.now() - transition.start) / Math.max(1, transition.duration));
+        if (!STRUCTURAL.some(key => transition.from[key] !== settings[key])) {
+          Object.assign(from, blendSettings(transition.from, settings, t));
+          from.colors = { light: mixColors(transition.from.colors.light, settings.colors.light, t), dark: mixColors(transition.from.colors.dark, settings.colors.dark, t) };
+        }
+      }
+      activeState = name;
+      Object.assign(settings, mergeSettings(collections[name], {}), { playing: settings.playing });
+      transition = duration > 0 ? { from, start: performance.now(), duration } : null;
+      dirty = true; schedule();
+      return true;
     },
     setTheme(name) { if (name === 'light' || name === 'dark') { activeTheme = name; dirty = true; schedule(); } },
     play() { settings.playing = true; schedule(); },
