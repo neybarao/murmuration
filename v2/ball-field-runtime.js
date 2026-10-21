@@ -9,26 +9,28 @@
 // itself, BALL_FIELD_DEFAULTS and browser globals.
 
 const BALL_FIELD_DEFAULTS = Object.freeze({
-  zoom: 50,              // 0..100, 50 = fit, wheel/pinch moves it; high values put the camera inside the field
-  tilt: 55,              // degrees the sheet leans away from the viewer
+  zoom: 50,              // 0..100, 50 = the flat sheet covers the screen; high values put the camera inside the field
+  tilt: 0,               // degrees the top of the sheet leans away before rotation
   playing: true,
   loopLength: 30,        // seconds
-  gridSpacing: 2,        // world units between balls (field is 520 units wide)
-  ballSize: 90,          // diameter, % of grid spacing
+  gridSpacing: 2,        // world units between balls; the field is 520 units wide, so 2 = 260 x 260 balls
+  ballSize: 6,           // diameter as a share of the grid spacing: 25 = touching
   scatter: 9,            // world units
   scatterMotion: 360,    // degrees each ball orbits its scatter point
   scatterCycles: 1,
-  displace: 0,           // world units out of the sheet, scaled by the displace property
+  // Displace and twist: value = (static + swing * sin(cycles * loop)) * property. The property is 0..1
+  // across the sheet; Center-X falls linearly from 1 on the vertical centre line to 0 at the side edges.
+  displace: 0,           // world units towards the viewer
   displaceProperty: 'centerX',
-  displaceSwing: 75,     // world units of travelling wave
+  displaceSwing: 75,     // world units
   displaceCycles: 1,
-  twistAngle: 6,         // degrees around the vertical axis, scaled by the twist property
+  twistAngle: 6,         // degrees each row turns around the horizontal axis (top edge away from the viewer)
   twistProperty: 'centerX',
-  twistSwing: 120,       // degrees of travelling wave
+  twistSwing: 360,       // degrees
   twistCycles: 1,
   rotationAxis: 'x',
   rotation: 0,           // degrees, static offset
-  rotationCycles: 1,     // whole turns per loop
+  rotationCycles: 1,     // whole turns per loop; positive tips the top (X) or the right edge (Y) away
   colors: {
     light: { ball: '#111111', background: '#FFFFFF' },
     dark: { ball: '#EDEDED', background: '#0E1012' }
@@ -38,10 +40,13 @@ const BALL_FIELD_DEFAULTS = Object.freeze({
 function createBallFieldRuntime(el, options = {}) {
   const PROPERTIES = ['x', 'y', 'centerX', 'centerY', 'radius', 'random', 'diamond', 'rectangle', 'fastTop'];
   const AXES = { x: [1, 0, 0], y: [0, 1, 0], z: [0, 0, 1], xy: [1, 1, 0], xz: [1, 0, 1], yz: [0, 1, 1], xyz: [1, 1, 1] };
-  const FIELD = 520, HALF = FIELD / 2, FOV = 40 * Math.PI / 180, TAU = Math.PI * 2;
+  const FIELD = 520, HALF = FIELD / 2, TAU = Math.PI * 2;
+  // Camera distance at zoom 1 in half-field units (measured from the reference: about 2.4), and how far
+  // the flat sheet bleeds past the screen edge in cover mode.
+  const PERSPECTIVE = 2.4, BLEED = 0.96;
   const FALLBACK_MAX_BALLS = 9000;
   const {
-    renderer = 'webgl2', theme = 'light', maxPixelRatio = 2,
+    renderer = 'webgl2', theme = 'light', maxPixelRatio = 2, fit = 'cover',
     respectReducedMotion = true, onFrame = null
   } = options;
   const settings = mergeSettings(BALL_FIELD_DEFAULTS, options.settings || {});
@@ -76,12 +81,12 @@ function createBallFieldRuntime(el, options = {}) {
     switch (index) {
       case 0: return nx * 0.5 + 0.5;
       case 1: return ny * 0.5 + 0.5;
-      case 2: return Math.abs(nx);
-      case 3: return Math.abs(ny);
-      case 4: return Math.min(Math.hypot(nx, ny) / Math.SQRT2, 1);
+      case 2: return 1 - Math.abs(nx);
+      case 3: return 1 - Math.abs(ny);
+      case 4: return Math.max(0, 1 - Math.hypot(nx, ny));
       case 5: return r;
-      case 6: return (Math.abs(nx) + Math.abs(ny)) * 0.5;
-      case 7: return Math.max(Math.abs(nx), Math.abs(ny));
+      case 6: return Math.max(0, 1 - Math.abs(nx) - Math.abs(ny));
+      case 7: return 1 - Math.max(Math.abs(nx), Math.abs(ny));
       default: return Math.pow(ny * 0.5 + 0.5, 3);
     }
   }
@@ -105,21 +110,26 @@ function createBallFieldRuntime(el, options = {}) {
   // Everything the frame needs, derived once per frame from settings and progress.
   function frameParameters() {
     const s = settings;
-    const side = Math.max(1, Math.round(FIELD / Math.max(0.5, s.gridSpacing)));
+    const spacing = Math.max(0.5, s.gridSpacing);
+    const side = Math.max(1, Math.floor(FIELD / spacing + 1e-6));
     const zoomFactor = Math.pow(2, (s.zoom - 50) / 12.5);
-    const fitDistance = HALF * 1.3 / Math.tan(FOV / 2);
     const phase = progress * TAU;
-    const spin = axisRotation(AXES[s.rotationAxis] || AXES.x, s.rotation * Math.PI / 180 + Math.round(s.rotationCycles) * phase);
-    const tilt = axisRotation(AXES.x, -s.tilt * Math.PI / 180);
+    // The X component is mirrored so a positive angle tips the top away (X) and the right edge away (Y),
+    // as in the reference.
+    const axis = AXES[s.rotationAxis] || AXES.x;
+    const spin = axisRotation([-axis[0], axis[1], axis[2]], s.rotation * Math.PI / 180 + Math.round(s.rotationCycles) * phase);
+    // "cover": the flat sheet seen head-on fills the larger screen side, like background-size: cover.
+    const screenHalf = (fit === 'contain' ? Math.min(width, height) : Math.max(width, height)) * ratio * 0.5;
+    const tilt = axisRotation([-1, 0, 0], s.tilt * Math.PI / 180);
     const deg = Math.PI / 180;
     return {
       side, count: side * side,
-      spacing: FIELD / side,
-      camDist: fitDistance / zoomFactor,
-      focal: (height * ratio) * 0.5 / Math.tan(FOV / 2),
+      spacing,
+      camDist: HALF * PERSPECTIVE / zoomFactor,
+      focal: screenHalf * PERSPECTIVE / BLEED,
       phase,
       rot: multiply(tilt, spin),
-      ballSize: Math.max(0.01, s.ballSize / 100) * (FIELD / side),
+      ballSize: Math.max(0.01, s.ballSize / 25) * spacing,
       scatter: [s.scatter, s.scatterMotion * deg, Math.round(s.scatterCycles)],
       displace: [s.displace, s.displaceSwing, Math.round(s.displaceCycles), Math.max(0, PROPERTIES.indexOf(s.displaceProperty))],
       twist: [s.twistAngle * deg, s.twistSwing * deg, Math.round(s.twistCycles), Math.max(0, PROPERTIES.indexOf(s.twistProperty))]
@@ -151,12 +161,12 @@ function createBallFieldRuntime(el, options = {}) {
       float property(int i, vec2 n, float r) {
         if (i == 0) return n.x * .5 + .5;
         if (i == 1) return n.y * .5 + .5;
-        if (i == 2) return abs(n.x);
-        if (i == 3) return abs(n.y);
-        if (i == 4) return min(length(n) / 1.41421356, 1.);
+        if (i == 2) return 1. - abs(n.x);
+        if (i == 3) return 1. - abs(n.y);
+        if (i == 4) return max(0., 1. - length(n));
         if (i == 5) return r;
-        if (i == 6) return (abs(n.x) + abs(n.y)) * .5;
-        if (i == 7) return max(abs(n.x), abs(n.y));
+        if (i == 6) return max(0., 1. - abs(n.x) - abs(n.y));
+        if (i == 7) return 1. - max(abs(n.x), abs(n.y));
         return pow(n.y * .5 + .5, 3.);
       }
       vec3 rotateAround(vec3 v, vec3 k, float a) {
@@ -167,14 +177,16 @@ function createBallFieldRuntime(el, options = {}) {
         int id = gl_InstanceID;
         uint uid = uint(id);
         float r0 = rand(uid, 0u), r1 = rand(uid, 1u), r2 = rand(uid, 2u), r3 = rand(uid, 3u);
-        float denom = max(float(side - 1), 1.);
-        vec2 n = side > 1 ? vec2(float(id % side), float(id / side)) / denom * 2. - 1. : vec2(0);
-        vec3 p = vec3(n * (spacing * denom * .5), 0.);
+        // World position on the flat sheet: x right, y up, z towards the viewer. Row 0 is the top.
+        float mid = float(side - 1) * .5;
+        vec3 p = vec3((float(id % side) - mid) * spacing, (mid - float(id / side)) * spacing, 0.);
+        vec2 n = p.xy / 260.;
         float f = property(int(displaceP.w), n, r0);
-        p.z += displaceP.x * f + displaceP.y * sin(displaceP.z * phase - f * TAU);
+        p.z += (displaceP.x + displaceP.y * sin(displaceP.z * phase)) * f;
         f = property(int(twistP.w), n, r0);
-        float twist = twistP.x * f + twistP.y * sin(twistP.z * phase - f * TAU);
-        p = vec3(p.x * cos(twist) + p.z * sin(twist), p.y, -p.x * sin(twist) + p.z * cos(twist));
+        float twist = (twistP.x + twistP.y * sin(twistP.z * phase)) * f;
+        float tc = cos(twist), ts = sin(twist);
+        p = vec3(p.x, p.y * tc + p.z * ts, p.z * tc - p.y * ts);
         if (scatterP.x != 0.) {
           float z = r0 * 2. - 1., a = r1 * TAU, s = sqrt(max(0., 1. - z * z));
           vec3 dir = vec3(s * cos(a), s * sin(a), z) * (.35 + .65 * r2);
@@ -196,14 +208,17 @@ function createBallFieldRuntime(el, options = {}) {
       }`;
     const fragment = `#version 300 es
       precision mediump float;
-      uniform vec3 color;
+      uniform vec3 color, highlight;
       in vec2 local;
       in float halfPx, coverage;
       out vec4 result;
       void main() {
         float a = clamp((1. - length(local)) * halfPx + .5, 0., 1.) * coverage;
         if (a <= 0.) discard;
-        result = vec4(color * a, a);
+        // Lit sphere: a soft highlight up and to the left, like the reference's ball sprites.
+        float h = 1. - clamp(length(local - vec2(-.38, .38)) * 1.25, 0., 1.);
+        vec3 shaded = mix(color, highlight, h * h * .85);
+        result = vec4(shaded * a, a);
       }`;
     let program, vao, u = {};
     function build() {
@@ -221,7 +236,7 @@ function createBallFieldRuntime(el, options = {}) {
       gl.deleteShader(vs); gl.deleteShader(fs);
       if (!gl.getProgramParameter(program, gl.LINK_STATUS)) throw Error(gl.getProgramInfoLog(program));
       vao = gl.createVertexArray(); // no attributes: everything comes from gl_InstanceID
-      for (const name of ['side', 'spacing', 'phase', 'camDist', 'focal', 'ballSize', 'viewport', 'rot', 'scatterP', 'displaceP', 'twistP', 'color']) {
+      for (const name of ['side', 'spacing', 'phase', 'camDist', 'focal', 'ballSize', 'viewport', 'rot', 'scatterP', 'displaceP', 'twistP', 'color', 'highlight']) {
         u[name] = gl.getUniformLocation(program, name);
       }
       gl.enable(gl.BLEND);
@@ -256,6 +271,8 @@ function createBallFieldRuntime(el, options = {}) {
         gl.uniform4f(u.displaceP, ...fp.displace);
         gl.uniform4f(u.twistP, ...fp.twist);
         gl.uniform3f(u.color, ...ink);
+        const hi = hexToRgb(colors.highlight || colors.background);
+        gl.uniform3f(u.highlight, ...hi);
         gl.drawArraysInstanced(gl.TRIANGLE_STRIP, 0, 4, fp.count);
         return fp.count;
       },
@@ -277,7 +294,7 @@ function createBallFieldRuntime(el, options = {}) {
       draw(fp, colors) {
         const stride = Math.max(1, Math.ceil(Math.sqrt(fp.count / FALLBACK_MAX_BALLS)));
         const cw = canvas.width, ch = canvas.height, cx = cw / 2, cy = ch / 2, m = fp.rot;
-        const denom = Math.max(fp.side - 1, 1), halfWidth = fp.spacing * denom * 0.5;
+        const mid = (fp.side - 1) / 2;
         const [sAmount, sMotion, sCycles] = fp.scatter, [dAmount, dSwing, dCycles, dProp] = fp.displace;
         const [tAngle, tSwing, tCycles, tProp] = fp.twist;
         const size = fp.ballSize * stride;
@@ -289,14 +306,14 @@ function createBallFieldRuntime(el, options = {}) {
         for (let iy = 0; iy < fp.side; iy += stride) for (let ix = 0; ix < fp.side; ix += stride) {
           const id = iy * fp.side + ix;
           const r0 = rand(id, 0), r1 = rand(id, 1), r2 = rand(id, 2), r3 = rand(id, 3);
-          const nx = fp.side > 1 ? ix / denom * 2 - 1 : 0, ny = fp.side > 1 ? iy / denom * 2 - 1 : 0;
-          let x = nx * halfWidth, y = ny * halfWidth, z = 0;
+          let x = (ix - mid) * fp.spacing, y = (mid - iy) * fp.spacing, z = 0;
+          const nx = x / HALF, ny = y / HALF;
           let f = property(dProp, nx, ny, r0);
-          z += dAmount * f + dSwing * Math.sin(dCycles * fp.phase - f * TAU);
+          z += (dAmount + dSwing * Math.sin(dCycles * fp.phase)) * f;
           f = property(tProp, nx, ny, r0);
-          const tw = tAngle * f + tSwing * Math.sin(tCycles * fp.phase - f * TAU);
+          const tw = (tAngle + tSwing * Math.sin(tCycles * fp.phase)) * f;
           const c = Math.cos(tw), s = Math.sin(tw);
-          [x, z] = [x * c + z * s, -x * s + z * c];
+          [y, z] = [y * c + z * s, z * c - y * s];
           if (sAmount) {
             const dz = r0 * 2 - 1, a = r1 * TAU, sr = Math.sqrt(Math.max(0, 1 - dz * dz)), k = 0.35 + 0.65 * r2;
             const v = [sr * Math.cos(a) * k, sr * Math.sin(a) * k, dz * k];
@@ -333,8 +350,13 @@ function createBallFieldRuntime(el, options = {}) {
     width = Math.max(1, rect.width); height = Math.max(1, rect.height);
     ratio = Math.min(maxPixelRatio, window.devicePixelRatio || 1);
     const w = Math.round(width * ratio), h = Math.round(height * ratio);
-    if (canvas.width !== w || canvas.height !== h) { canvas.width = w; canvas.height = h; }
     dirty = true;
+    if (canvas.width !== w || canvas.height !== h) {
+      canvas.width = w; canvas.height = h;
+      // Resizing clears the canvas. Redraw now: a resize observed after this frame's animation
+      // callback would otherwise leave a paused field blank.
+      if (!destroyed && backend) render();
+    }
     schedule();
   }
   function render() {

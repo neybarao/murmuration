@@ -77,6 +77,16 @@ const check = (ok, label) => { console.log(`${ok ? 'PASS' : 'FAIL'}: ${label}`);
     });
     check(same < 0.002, `loop end matches loop start (${(same * 100).toFixed(3)}% pixels differ)`);
 
+    // Real mouse clicks reach the buttons that sit over the preview.
+    await page.evaluate(() => { state.playing = true; runtime.update(state); syncControls(); });
+    await page.click('#playBtn');
+    await page.click('#themeBtn');
+    await page.click('#fullBtn');
+    const clicked = await page.evaluate(() => [state.playing, theme, document.getElementById('app').classList.contains('is-full')]);
+    check(clicked[0] === false && clicked[1] === 'dark' && clicked[2] === true, `Pause, Dark and Full screen respond to clicks (${clicked.join(', ')})`);
+    await page.click('#fullBtn');
+    await page.click('#themeBtn');
+
     // Share link round trip.
     await page.evaluate(() => { state.twistAngle = 123; state.gridSpacing = 7; runtime.update(state); });
     const link = await page.evaluate(() => shareUrl());

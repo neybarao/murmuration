@@ -29,8 +29,10 @@
       display: grid; grid-template-columns: minmax(0, 1fr) 320px; height: 100dvh;
       background: var(--surface); color: var(--ink); font-size: 13px;
     }
+    .app.is-full { grid-template-columns: minmax(0, 1fr) 0; }
+    .app.is-full .panel { visibility: hidden; padding: 0; border: 0; }
     :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
-    .stage { position: relative; min-width: 0; overflow: hidden; isolation: isolate; cursor: grab; touch-action: none; }
+    .stage { position: relative; min-width: 0; overflow: hidden; isolation: isolate; touch-action: none; }
     .hud, .actions {
       position: absolute; top: 16px; z-index: 2; display: flex; gap: 6px; align-items: center;
       padding: 2px; border: 1px solid var(--line); border-radius: 10px; background: var(--chip);
@@ -67,6 +69,7 @@
     .toast.is-visible { opacity: 1; }
     @media (max-width: 760px) {
       .app { grid-template-columns: 1fr; grid-template-rows: 55dvh 1fr; }
+      .app.is-full { grid-template-columns: 1fr; grid-template-rows: 1fr 0; }
       .panel { border-left: 0; border-top: 1px solid var(--line); }
       .hud { top: auto; bottom: 12px; left: 12px; }
       .actions { right: 12px; top: 12px; }
@@ -78,6 +81,7 @@
     <main class="stage" id="stage" aria-label="Ball field preview">
       <div class="hud" id="hud" aria-live="off"></div>
       <div class="actions">
+        <button type="button" id="fullBtn" aria-pressed="false">Full screen</button>
         <button type="button" id="playBtn">Pause</button>
         <button type="button" id="themeBtn">Dark</button>
         <button type="button" id="linkBtn">Copy link</button>
@@ -101,7 +105,7 @@
     const SECTIONS = [
       ['View', [['zoom', 'Zoom', 0, 100, 0.5, v => (2 ** ((v - 50) / 12.5)).toFixed(2) + '×'], ['tilt', 'Tilt', -90, 90, 1, '°']]],
       ['Loop', [['playing', 'Play', 'check'], ['loopLength', 'Loop length', 1, 60, 0.5, 's']]],
-      ['Array', [['gridSpacing', 'Grid spacing', 2, 40, 1], ['ballSize', 'Ball size', 1, 200, 1, '%']]],
+      ['Array', [['gridSpacing', 'Grid spacing', 2, 40, 1], ['ballSize', 'Ball size', 1, 200, 1]]],
       ['Scatter', [['scatter', 'Scatter', 0, 300, 0.5], ['scatterMotion', 'Scatter motion', -720, 720, 1, '°'], ['scatterCycles', 'Scatter motion cycles', -4, 4, 1, '×']]],
       ['Displace', [['displace', 'Displace', -600, 600, 1], ['displaceProperty', 'Displace property', PROPERTY_OPTIONS], ['displaceSwing', 'Displace swing', 0, 600, 1], ['displaceCycles', 'Displace cycles', 0, 8, 1, '×']]],
       ['Twist', [['twistAngle', 'Twist angle', -720, 720, 1, '°'], ['twistProperty', 'Twist property', PROPERTY_OPTIONS], ['twistSwing', 'Twist swing', 0, 720, 1, '°'], ['twistCycles', 'Twist cycles', 0, 8, 1, '×']]],
@@ -213,6 +217,11 @@
       clearTimeout(toast.t); toast.t = setTimeout(() => el.classList.remove('is-visible'), 1600);
     }
 
+    $('fullBtn').onclick = () => {
+      const full = app.classList.toggle('is-full');
+      $('fullBtn').setAttribute('aria-pressed', String(full));
+      $('fullBtn').textContent = full ? 'Show controls' : 'Full screen';
+    };
     $('playBtn').onclick = () => { state.playing = !state.playing; runtime.update(state); syncControls(); scheduleLink(); };
     $('themeBtn').onclick = () => { theme = theme === 'dark' ? 'light' : 'dark'; applyTheme(); scheduleLink(); };
     $('resetBtn').onclick = () => { state = clone(BALL_FIELD_DEFAULTS); runtime.update(state); syncControls(); scheduleLink(); };
@@ -239,7 +248,13 @@
     }
     stage.addEventListener('wheel', event => { event.preventDefault(); setZoom(state.zoom - event.deltaY * 0.02); }, { passive: false });
     const pointers = new Map(); let pinch = 0;
-    stage.addEventListener('pointerdown', e => { pointers.set(e.pointerId, e); stage.setPointerCapture(e.pointerId); });
+    // Only touches that start on the preview itself take part in pinch zoom. Capturing every pointer
+    // on the stage retargeted clicks away from the buttons that sit inside it.
+    stage.addEventListener('pointerdown', e => {
+      if (e.pointerType !== 'touch' || e.target !== runtime.canvas) return;
+      pointers.set(e.pointerId, e);
+      stage.setPointerCapture(e.pointerId);
+    });
     stage.addEventListener('pointermove', e => {
       if (!pointers.has(e.pointerId)) return;
       pointers.set(e.pointerId, e);

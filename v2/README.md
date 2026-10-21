@@ -35,7 +35,9 @@ Runtime API: `update(settings)`, `setTheme('light'|'dark')`, `play()`, `pause()`
 
 ## Differences from the reference
 
-- The motion formulas are our own, so the same slider values do not produce identical images.
+- Displace, twist, rotation, ball size and camera distance follow measurements of the reference
+  (ball positions captured from its canvas draw calls), so the same slider values give the same shapes.
+  Framing differs: v2 scales the flat sheet to cover the screen, so it appears about 1.35x larger.
 - Red, Green, Blue and Brightness properties need a source image and are not implemented yet.
 - Rotation axes `X15Z` and `XY15Z` are not implemented.
 - The Canvas 2D fallback caps drawing at about 9,000 balls and draws squares.
