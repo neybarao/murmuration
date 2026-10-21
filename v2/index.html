@@ -4,6 +4,11 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Ball Field Lab</title>
+  <script>
+    // Servers with clean URLs answer /v2 without a trailing slash; relative script paths would then
+    // resolve against the site root. Redirect to /v2/ so ./ball-field-runtime.js loads.
+    if (!/\/$|\.html$/.test(location.pathname)) location.replace(location.pathname + '/' + location.search + location.hash);
+  </script>
   <style>
     :root {
       color-scheme: light;
