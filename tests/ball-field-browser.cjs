@@ -100,7 +100,13 @@ const check = (ok, label) => { console.log(`${ok ? 'PASS' : 'FAIL'}: ${label}`);
     await page.evaluate(() => setPlaying(false));
     await page.click('[data-screen="chat"]');
     const during = await page.evaluate(() => runtime.stats().transitioning);
-    await page.waitForTimeout(1600);
+    // Software WebGL renders slowly here, so wait for the transition to report done (it lasts 1.2 s).
+    const settledAfter = await page.evaluate(async () => {
+      const start = performance.now();
+      while (runtime.stats().transitioning && performance.now() - start < 8000) await new Promise(r => setTimeout(r, 50));
+      return Math.round(performance.now() - start);
+    });
+    console.log(`INFO: transition reported done ${settledAfter} ms after the check started`);
     const chat = await page.evaluate(() => [runtime.activeState, runtime.settings.centerAttenuation, runtime.stats().transitioning, active]);
     check(during === true && chat[0] === 'chat' && chat[1] === 0.72 && chat[2] === false && chat[3] === 'chat', `Home to Chat transition runs and settles (${chat.join(', ')})`);
     // Cross-fade path: Chat on Organic, then back to Home.
