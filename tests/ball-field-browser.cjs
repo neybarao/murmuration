@@ -88,10 +88,12 @@ const check = (ok, label) => { console.log(`${ok ? 'PASS' : 'FAIL'}: ${label}`);
     await page.click('#themeBtn');
 
     // Effect selector: Organic loads its own preset and renders.
+    await page.evaluate(() => { const i = document.getElementById('c-centerAttenuation'); i.value = 0.7; i.dispatchEvent(new Event('input')); });
     await page.selectOption('#c-effect', 'organic');
     await page.waitForTimeout(300);
-    const organic = await page.evaluate(() => [state.effect, state.tilt, runtime.settings.effect, runtime.stats().balls]);
+    const organic = await page.evaluate(() => [state.effect, state.tilt, runtime.settings.effect, runtime.settings.centerAttenuation]);
     check(organic[0] === 'organic' && organic[1] === 55 && organic[2] === 'organic', `Organic effect loads its preset (${organic.join(', ')})`);
+    check(organic[3] === 0.7, `center attenuation survives switching effect (${organic[3]})`);
     await page.selectOption('#c-effect', 'ballAction');
 
     // Share link round trip.

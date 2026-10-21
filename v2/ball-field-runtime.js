@@ -67,6 +67,10 @@ const BALL_FIELD_EFFECTS = Object.freeze({
 const BALL_FIELD_DEFAULTS = Object.freeze({
   effect: 'ballAction',
   playing: true,
+  // Same mask as v1: fades balls in the central band of the screen (full effect between 25% and 75% of
+  // the width, easing out to 15% and 85%). At 1, centre balls keep 5% of their opacity. Kept when
+  // switching effect, like the colors.
+  centerAttenuation: 0,
   ...BALL_FIELD_EFFECTS.ballAction,
   colors: {
     light: { ball: '#111111', background: '#FFFFFF' },
@@ -186,6 +190,7 @@ function createBallFieldRuntime(el, options = {}) {
       rot: multiply(tilt, spin),
       ballSize: Math.max(0.01, s.ballSize / 25) * spacing,
       maxBall: Math.max(0.5, Number(s.maxBallSize) || 4) * ratio,
+      attenuation: Math.min(1, Math.max(0, Number(s.centerAttenuation) || 0)),
       scatter: [s.scatter, s.scatterMotion * deg, Math.round(s.scatterCycles)],
       displace: [s.displace, s.displaceSwing, Math.round(s.displaceCycles), Math.max(0, PROPERTIES.indexOf(s.displaceProperty))],
       twist: [s.twistAngle * deg, s.twistSwing * deg, Math.round(s.twistCycles), Math.max(0, PROPERTIES.indexOf(s.twistProperty))]
@@ -288,11 +293,16 @@ function createBallFieldRuntime(el, options = {}) {
     const fragment = `#version 300 es
       precision mediump float;
       uniform vec3 color, highlight;
+      uniform float attenuation, screenWidth;
       in vec2 local;
       in float halfPx, coverage;
       out vec4 result;
       void main() {
         float a = clamp((1. - length(local)) * halfPx + .5, 0., 1.) * coverage;
+        if (attenuation > 0.) {
+          float h = gl_FragCoord.x / screenWidth;
+          a *= 1. - smoothstep(.15, .25, h) * (1. - smoothstep(.75, .85, h)) * attenuation * .95;
+        }
         if (a <= 0.) discard;
         // Lit sphere: a soft highlight up and to the left, like the reference's ball sprites.
         float h = 1. - clamp(length(local - vec2(-.38, .38)) * 1.25, 0., 1.);
@@ -315,7 +325,7 @@ function createBallFieldRuntime(el, options = {}) {
       gl.deleteShader(vs); gl.deleteShader(fs);
       if (!gl.getProgramParameter(program, gl.LINK_STATUS)) throw Error(gl.getProgramInfoLog(program));
       vao = gl.createVertexArray(); // no attributes: everything comes from gl_InstanceID
-      for (const name of ['side', 'mode', 'spacing', 'phase', 'camDist', 'focal', 'ballSize', 'maxBall', 'viewport', 'rot', 'scatterP', 'displaceP', 'twistP', 'color', 'highlight']) {
+      for (const name of ['side', 'mode', 'spacing', 'phase', 'camDist', 'focal', 'ballSize', 'maxBall', 'viewport', 'rot', 'scatterP', 'displaceP', 'twistP', 'color', 'highlight', 'attenuation', 'screenWidth']) {
         u[name] = gl.getUniformLocation(program, name);
       }
       gl.enable(gl.BLEND);
@@ -354,6 +364,8 @@ function createBallFieldRuntime(el, options = {}) {
         gl.uniform3f(u.color, ...ink);
         const hi = hexToRgb(colors.highlight || colors.background);
         gl.uniform3f(u.highlight, ...hi);
+        gl.uniform1f(u.attenuation, fp.attenuation);
+        gl.uniform1f(u.screenWidth, canvas.width);
         gl.drawArraysInstanced(gl.TRIANGLE_STRIP, 0, 4, fp.count);
         return fp.count;
       },
@@ -422,6 +434,10 @@ function createBallFieldRuntime(el, options = {}) {
           const d = Math.max(1, fp.maxBall * Math.tanh(size * fp.focal / depth / fp.maxBall));
           const px = cx + qx * fp.focal / depth, py = cy - qy * fp.focal / depth;
           if (px + d < 0 || py + d < 0 || px - d > cw || py - d > ch) continue;
+          if (fp.attenuation) {
+            const h = px / cw, smooth = (a, b, v) => { const t = Math.min(1, Math.max(0, (v - a) / (b - a))); return t * t * (3 - 2 * t); };
+            ctx.globalAlpha = 1 - smooth(0.15, 0.25, h) * (1 - smooth(0.75, 0.85, h)) * fp.attenuation * 0.95;
+          }
           ctx.fillRect(px - d / 2, py - d / 2, d, d);
           drawn++;
         }

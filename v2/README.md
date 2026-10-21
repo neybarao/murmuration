@@ -11,6 +11,9 @@ Each effect is a preset in `BALL_FIELD_EFFECTS`; switching effect loads its pres
 `maxBallSize` (CSS px) softly caps the on-screen diameter, so balls passing close to the camera
 stop growing. Defaults: 2.5 px for Ball Action, 7 px for Organic.
 
+`centerAttenuation` (0 to 1) uses v1's mask: balls fade between 25% and 75% of the screen width,
+easing out to 15% and 85%; at 1 they keep 5% opacity. It is kept when switching effect.
+
 A grid of balls placed in 3D and bent by scatter, displace, twist and rotation, looping seamlessly.
 Inspired by a colleague's "Ball Action" prototype; reimplemented from scratch (no code reused) because
 that version draws every ball on the CPU with Canvas 2D and reaches about 7 fps at 67,600 balls.
